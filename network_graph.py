@@ -172,7 +172,7 @@ config["hosts"] = {}
 for i in range(node_count):
     location = random.choices(locations, map(lambda lc: lc.weight, locations))[0]
     if i == 0:
-        node_type = supernode
+        node_type = fullnode
     else:
         node_type = random.choices(node_types, map(lambda nt: nt.weight, node_types))[0]
 

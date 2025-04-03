@@ -322,7 +322,7 @@ if __name__ == "__main__":
 
     timeline = {}
     # this value is tuned after running this script for a couple times
-    max_arr_time = 5.0
+    max_arr_time = 10.0
 
     print("Parsing log files")
     # Read Simulations from folder
@@ -355,7 +355,7 @@ if __name__ == "__main__":
     plt.xlim(0.0, max_arr_time)
     plt.xlabel("Time")
     plt.ylabel("Number of Nodes")
-    plt.legend(fontsize="small")
+    # plt.legend(fontsize="small")
     plt.title(f"Node delivery count of msgID across time {folder}")
     plt.grid(True)
 

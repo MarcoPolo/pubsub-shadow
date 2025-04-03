@@ -44,8 +44,8 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 		const latency = 50 * time.Millisecond
 		const bandwidth = 20 * simlibp2p.OneMbps
 
-		publisherBW := 100 * simlibp2p.OneMbps
-		publisherLatency := 5 * time.Millisecond
+		publisherBW := 50 * simlibp2p.OneMbps
+		publisherLatency := 20 * time.Millisecond
 		publisherSettings := simconn.NodeBiDiLinkSettings{
 			Downlink: simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency / 2},
 			Uplink:   simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency},
