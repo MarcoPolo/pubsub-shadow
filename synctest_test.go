@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -42,11 +43,18 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 		const latency = 50 * time.Millisecond
 		const bandwidth = 20 * simlibp2p.OneMbps
 
+		superNodeSettings := simconn.NodeBiDiLinkSettings{
+			Downlink: simconn.LinkSettings{BitsPerSecond: 1_000 * simlibp2p.OneMbps, Latency: 2 * time.Millisecond},
+			Uplink:   simconn.LinkSettings{BitsPerSecond: 1_000 * simlibp2p.OneMbps, Latency: 2 * time.Millisecond},
+		}
+
 		network, meta, err := simlibp2p.SimpleLibp2pNetwork([]simlibp2p.NodeLinkSettingsAndCount{
+			// First node will be the publisher, it will be a super node
+			{LinkSettings: superNodeSettings, Count: 1},
 			{LinkSettings: simconn.NodeBiDiLinkSettings{
 				Downlink: simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2}, // Divide by two since this is latency for each direction
 				Uplink:   simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2},
-			}, Count: nodeCount},
+			}, Count: nodeCount - 1},
 		}, simlibp2p.NetworkSettings{
 			UseBlankHost: true,
 			QUICReuseOptsForHostIdx: func(idx int) []quicreuse.Option {
@@ -93,8 +101,13 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 					ColumnCount:         columnCount,
 					SubnetCount:         columnCount,
 					SamplingRequirement: samplingRequirement,
-					PublishStrategy:     "inOrder",
+					PublishStrategy:     publishStrategy,
 					NumberOfConnections: numberOfConnections,
+					OnFinishPublishing: func() bool {
+						// wait for 30 seconds before stopping the publisher
+						time.Sleep(30 * time.Second)
+						return true
+					},
 				})
 				if nodeIdx == 0 {
 					cancel()
@@ -106,9 +119,10 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 }
 
 type SimNetConnector struct {
-	t        *testing.T
-	sem      chan struct{}
-	allNodes []host.Host
+	t              *testing.T
+	sem            chan struct{}
+	allNodes       []host.Host
+	connectedNodes atomic.Int64
 }
 
 func newSimNetConnector(t *testing.T, allNodes []host.Host, connectorConcurrency int) *SimNetConnector {
@@ -120,8 +134,11 @@ func newSimNetConnector(t *testing.T, allNodes []host.Host, connectorConcurrency
 }
 
 func (c *SimNetConnector) ConnectSome(ctx context.Context, h host.Host, nodeIdx int, count int) {
-	c.t.Logf("connecting %d to %d peers", nodeIdx, count)
-	defer c.t.Logf("done connecting %d to %d peers", nodeIdx, count)
+	defer func() {
+		x := c.connectedNodes.Add(1)
+		c.t.Logf("connected %d out of %d nodes", x, len(c.allNodes))
+	}()
+
 	c.sem <- struct{}{}
 	defer func() { <-c.sem }()
 	for j := 0; j < count; j++ {
