@@ -80,7 +80,7 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	// if it's a turn for the node to publish, publish
 	if nodeId == 0 {
 		batchedMsg := pubsub.NewBatchMessage()
-		switch *publishStrategy {
+		switch params.PublishStrategy {
 		case "inOrder":
 			batchedMsg.Strategy = batchedMsg.InOrder
 		case "rarestFirst":
@@ -88,7 +88,7 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 		case "shuffle":
 			batchedMsg.Strategy = batchedMsg.ShuffleQueuedRPC
 		default:
-			panic(fmt.Sprintf("Invalid publish strategy: %s", *publishStrategy))
+			panic(fmt.Sprintf("Invalid publish strategy: %s", params.PublishStrategy))
 		}
 
 		var msgsToPublish [][]byte

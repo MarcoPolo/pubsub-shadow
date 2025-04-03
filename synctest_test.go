@@ -43,14 +43,16 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 		const latency = 50 * time.Millisecond
 		const bandwidth = 20 * simlibp2p.OneMbps
 
-		superNodeSettings := simconn.NodeBiDiLinkSettings{
-			Downlink: simconn.LinkSettings{BitsPerSecond: 1_000 * simlibp2p.OneMbps, Latency: 2 * time.Millisecond},
-			Uplink:   simconn.LinkSettings{BitsPerSecond: 1_000 * simlibp2p.OneMbps, Latency: 2 * time.Millisecond},
+		publisherBW := 100 * simlibp2p.OneMbps
+		publisherLatency := 5 * time.Millisecond
+		publisherSettings := simconn.NodeBiDiLinkSettings{
+			Downlink: simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency / 2},
+			Uplink:   simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency},
 		}
 
 		network, meta, err := simlibp2p.SimpleLibp2pNetwork([]simlibp2p.NodeLinkSettingsAndCount{
-			// First node will be the publisher, it will be a super node
-			{LinkSettings: superNodeSettings, Count: 1},
+			// First node will be the publisher
+			{LinkSettings: publisherSettings, Count: 1},
 			{LinkSettings: simconn.NodeBiDiLinkSettings{
 				Downlink: simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2}, // Divide by two since this is latency for each direction
 				Uplink:   simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2},

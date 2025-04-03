@@ -322,9 +322,7 @@ if __name__ == "__main__":
 
     timeline = {}
     # this value is tuned after running this script for a couple times
-    max_arr_time_size = 20.0
-    # this value is tuned after running this script for a couple times
-    max_arr_time_num = 2.0
+    max_arr_time = 5.0
 
     print("Parsing log files")
     # Read Simulations from folder
@@ -354,7 +352,7 @@ if __name__ == "__main__":
         cdf = list(range(1, len(sorted_times) + 1))
         plt.step(sorted_times, cdf, where="post", label=msgId)
 
-    plt.xlim(0.0, 1)
+    plt.xlim(0.0, max_arr_time)
     plt.xlabel("Time")
     plt.ylabel("Number of Nodes")
     plt.legend(fontsize="small")

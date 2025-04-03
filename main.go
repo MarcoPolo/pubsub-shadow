@@ -26,7 +26,7 @@ const (
 var (
 	nodeCountFlag   = flag.Int("nodeCount", 100, "the number of nodes in the network")
 	targetConnsFlag = flag.Int("targetConns", 70, "the target number of connected peers")
-	publishStrategy = flag.String("publishStrategy", "inOrder", "publish strategy")
+	publishStrategy = flag.String("publishStrategy", "", "publish strategy")
 )
 
 // pubsubOptions creates a list of options to configure our router with.
@@ -63,7 +63,7 @@ func nodePrivKey(id int) crypto.PrivKey {
 const blobSize = 128 << 10
 const subnetCount = 128
 const columnCount = 128
-const blobCount = 8
+const blobCount = 32
 const samplingRequirement = 8
 
 func main() {
