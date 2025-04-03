@@ -27,6 +27,7 @@ var (
 	nodeCountFlag   = flag.Int("nodeCount", 100, "the number of nodes in the network")
 	targetConnsFlag = flag.Int("targetConns", 70, "the target number of connected peers")
 	publishStrategy = flag.String("publishStrategy", "", "publish strategy")
+	blobCountFlag   = flag.Int("blobCount", 0, "the number of blobs to publish")
 )
 
 // pubsubOptions creates a list of options to configure our router with.
@@ -63,7 +64,6 @@ func nodePrivKey(id int) crypto.PrivKey {
 const blobSize = 128 << 10
 const subnetCount = 128
 const columnCount = 128
-const blobCount = 32
 const samplingRequirement = 8
 
 func main() {
@@ -92,6 +92,10 @@ func main() {
 
 	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
 
+	if *blobCountFlag == 0 {
+		panic("blobCount must be set")
+	}
+
 	RunExperiment(ctx, logger, h, nodeId, ShadowConnector{}, ExperimentParams{
 		PublishStrategy:     *publishStrategy,
 		ColumnCount:         columnCount,
@@ -99,7 +103,7 @@ func main() {
 		SamplingRequirement: samplingRequirement,
 		NumberOfConnections: *targetConnsFlag,
 		BlobSize:            blobSize,
-		BlobCount:           blobCount,
+		BlobCount:           *blobCountFlag,
 	})
 }
 
@@ -140,6 +144,9 @@ func (c ShadowConnector) ConnectSome(ctx context.Context, h host.Host, nodeId in
 		peers[id] = struct{}{}
 		log.Printf("Connected to node%d: %s\n", id, addr)
 	}
+}
+
+func (c ShadowConnector) AfterConnect(ctx context.Context) {
 }
 
 func subnetsForPeer(subnetCount int, maxSubnets int) []int {

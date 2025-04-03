@@ -36,7 +36,8 @@ func TestGossipSubPublishShuffle(t *testing.T) {
 
 func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 	synctest.Run(func() {
-		const nodeCount = 256
+		const blobCount = 32
+		const nodeCount = 1_000
 		const numberOfConnections = 64
 		const qlogDir = ""
 
@@ -121,28 +122,31 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 }
 
 type SimNetConnector struct {
-	t              *testing.T
-	sem            chan struct{}
-	allNodes       []host.Host
-	connectedNodes atomic.Int64
+	t               *testing.T
+	sem             chan struct{}
+	allNodes        []host.Host
+	connectionsDone chan struct{}
+	connectedNodes  atomic.Int64
 }
 
 func newSimNetConnector(t *testing.T, allNodes []host.Host, connectorConcurrency int) *SimNetConnector {
 	return &SimNetConnector{
-		t:        t,
-		sem:      make(chan struct{}, connectorConcurrency),
-		allNodes: allNodes,
+		t:               t,
+		sem:             make(chan struct{}, connectorConcurrency),
+		allNodes:        allNodes,
+		connectionsDone: make(chan struct{}),
 	}
 }
 
 func (c *SimNetConnector) ConnectSome(ctx context.Context, h host.Host, nodeIdx int, count int) {
 	defer func() {
 		x := c.connectedNodes.Add(1)
+		if x == int64(len(c.allNodes)) {
+			close(c.connectionsDone)
+		}
 		c.t.Logf("connected %d out of %d nodes", x, len(c.allNodes))
 	}()
 
-	c.sem <- struct{}{}
-	defer func() { <-c.sem }()
 	for j := 0; j < count; j++ {
 		n := rand.Intn(len(c.allNodes))
 		if n == nodeIdx {
@@ -153,8 +157,16 @@ func (c *SimNetConnector) ConnectSome(ctx context.Context, h host.Host, nodeIdx 
 		b := c.allNodes[n]
 		err := h.Connect(ctx, peer.AddrInfo{ID: b.ID(), Addrs: b.Addrs()})
 		if err != nil {
-			c.t.Errorf("error connecting to node %d: %s", n, err)
+			c.t.Logf("error connecting to node %d: %s", n, err)
 		}
 	}
+}
 
+func (c *SimNetConnector) AfterConnect(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-c.connectionsDone:
+		return
+	}
 }

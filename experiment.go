@@ -31,6 +31,7 @@ type ExperimentParams struct {
 
 type HostConnector interface {
 	ConnectSome(ctx context.Context, h host.Host, nodeId int, count int)
+	AfterConnect(ctx context.Context)
 }
 
 func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId int, connector HostConnector, params ExperimentParams) {
@@ -38,6 +39,10 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	logger.Printf("NodeId: %d\n", nodeId)
 	logger.Printf("PeerId: %s\n", h.ID())
 	logger.Printf("Listening on: %v\n", h.Addrs())
+
+	if params.BlobCount == 0 {
+		panic("BlobCount must be set")
+	}
 
 	// create a gossipsub node and subscribe to the topic
 	psOpts := pubsubOptions(logger)
@@ -73,6 +78,9 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 
 	// discover peers
 	connector.ConnectSome(ctx, h, nodeId, params.NumberOfConnections)
+	connector.AfterConnect(ctx)
+
+	logger.Printf("Connected to %d peers\n", len(h.Network().Peers()))
 
 	// wait until 00:02 for the meshes to be formed and so that the publish will be exactly at 00:02
 	time.Sleep(time.Until(time.Date(2000, time.January, 1, 0, 2, 0, 0, time.UTC)))

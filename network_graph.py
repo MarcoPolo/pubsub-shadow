@@ -129,11 +129,13 @@ parser.add_argument("--nodeCount", type=int, required=True)
 parser.add_argument("--targetConns", type=int, required=True)
 parser.add_argument("--publishStrategy", type=str, required=True)
 parser.add_argument("--output", type=str, required=True)
+parser.add_argument("--blobCount", type=int, required=True)
 args = parser.parse_args()
 
 node_count = args.nodeCount
 target_conn = args.targetConns
 publish_strategy = args.publishStrategy
+blob_count = args.blobCount
 
 ids = {}
 for node_type in node_types:
@@ -178,7 +180,7 @@ for i in range(node_count):
         "network_node_id": ids[f"{location.name}-{node_type.name}"],
         "processes": [
             {
-                "args": f"-publishStrategy {publish_strategy} -nodeCount {node_count} -targetConns {target_conn}",
+                "args": f"-publishStrategy {publish_strategy} -nodeCount {node_count} -targetConns {target_conn} -blobCount {blob_count}",
                 "expected_final_state": "running",
                 "path": "./pubsub-shadow",
             }

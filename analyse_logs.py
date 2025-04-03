@@ -331,7 +331,7 @@ if __name__ == "__main__":
     with open(f"{folder}/analysed_timeline.json", "w") as f:
         json.dump(timeline, f)
 
-    print(f"\tAnalysis for {folder} 2 blobs msgs")
+    print(f"\tAnalysis for {folder}")
     # only for one message published
     num_msgs = len(timeline["0"]["msgs"])
     print(f"Number of messages: {num_msgs}")
