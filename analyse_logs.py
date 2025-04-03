@@ -1,7 +1,6 @@
 import re
 import os
 import json
-import glob
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
@@ -321,45 +320,18 @@ if __name__ == "__main__":
         files = os.listdir(folder + "/hosts")
         nodeCount = len(files)
 
-    reparse = True
-
     timeline = {}
     # this value is tuned after running this script for a couple times
     max_arr_time_size = 20.0
     # this value is tuned after running this script for a couple times
     max_arr_time_num = 2.0
 
-    # announce_list = [0, 7, 8]
-    # size_list = [128, 256, 512, 1024, 2048, 4096, 8192]
-    # num_list = [1, 2, 4, 8, 16, 32, 64]
-    # malicious_list = [5, 10, 20, 30, 50]
-    announce_list = [0]
-    size_list = [128]
-    num_list = [128]
-    publish_strategy_list = ["inOrder", "rarestFirst", "shuffle"]
-    # publish_strategy_list = ["inOrder", "rarestFirst"]
-    malicious_list = []
+    print("Parsing log files")
+    # Read Simulations from folder
+    timeline = extract_node_timelines(folder, nodeCount)
 
-    files = glob.glob(f"{folder}/analysed_timeline.json")
-    if len(files) > 0:
-        print("Found saved timelines")
-        for i, file in enumerate(files):
-            print(f"{i + 1}. {file}")
-        use_saved = input(f"Enter which timeline file to use ({1}-{len(files)}/n):")
-        idx = ord(use_saved) - 49
-        if idx >= 0 and idx < len(files):
-            reparse = False
-            with open(files[idx], "r") as f:
-                print("Loading timeline file")
-                timeline = json.load(f)
-
-    if reparse:
-        print("Parsing log files")
-        # Read Simulations from folder
-        timeline = extract_node_timelines(folder, nodeCount)
-
-        with open(f"{folder}/analysed_timeline.json", "w") as f:
-            json.dump(timeline, f)
+    with open(f"{folder}/analysed_timeline.json", "w") as f:
+        json.dump(timeline, f)
 
     print(f"\tAnalysis for {folder} 2 blobs msgs")
     # only for one message published
@@ -388,67 +360,9 @@ if __name__ == "__main__":
     plt.legend(fontsize="small")
     plt.title(f"Node delivery count of msgID across time {folder}")
     plt.grid(True)
+
+    # Make plots dir if it doesn't exist
+    os.makedirs("./plots", exist_ok=True)
+
     plt.savefig(f"./plots/{folder}.png")
     print("plot saved")
-
-    # for publish_strategy in publish_strategy_list:
-    #     print(f"\nPublish Strategy = {publish_strategy}\n")
-    #     plt.figure(figsize=(8, 6))
-    #     for num_msgs in num_list:
-    #         print(f"\tAnalysis for {num_msgs} 2 blobs msgs")
-    #         # only for one message published
-    #         timeline_key = f"2-blobs-{num_msgs}-{publish_strategy}"
-    #         arr_times, rx_count, dups = analyse_timeline(
-    #             timeline[timeline_key], num_msgs
-    #         )
-
-    #         msg_times = {}
-    #         for msgId, times in arr_times.items():
-    #             if msgId == "f2l" or msgId == "l2f":
-    #                 continue
-    #             for nodeId, time in times:
-    #                 msg_times.setdefault(msgId, []).append(time)
-
-    #         # Plot msg delivery count across time
-    #         plt.figure()
-    #         for msgId, times in msg_times.items():
-    #             sorted_times = sorted(times)
-    #             # Create step function data: y = 1,2,...,len(times)
-    #             cdf = list(range(1, len(sorted_times) + 1))
-    #             plt.step(sorted_times, cdf, where="post", label=msgId)
-
-    #         plt.xlim(0.0, 1)
-    #         plt.xlabel("Time")
-    #         plt.ylabel("Number of Nodes")
-    #         plt.legend(fontsize="small")
-    #         plt.title(f"Node delivery count of msgID across time {timeline_key}")
-    #         plt.grid(True)
-    #         plt.savefig(
-    #             f"./plots/node_delivery_count_publish_strategy={publish_strategy}.png"
-    #         )
-    #         print("plot saved")
-
-    # 3. plot CDF of arrival times vs. nodes for 16 messages(of same size) published at the same time in presence of malicious nodes
-    # three different plots for different Dannounce. Each plot contains 5 CDFs for different percentages of malicious nodes
-    # for announce in announce_list:
-    #     print(f"\nAnnouncement Degree = {announce}\n")
-    #     plt.figure(figsize=(8, 6))
-    #     for malicious in malicious_list:
-    #         print(f"\tAnalysis for 16x128KB msgs with {malicious}% malicious nodes")
-    #         # only for one message published
-    #         timeline_key = f"malicious-{malicious}-{announce}"
-    #         arr_times, rx_count, dups = analyse_timelines(
-    #             timelines[timeline_key], 16
-    #         )
-    #         plot_cdf(arr_times["f2l"], f"{malicious}% malicious nodes")
-    #         print(f"\t\tAverage num. of dups: {sum(dups) / count}")
-    #         print(f"\t\tAverage num. lost: {sum(rx_count) / count}")
-
-    #     plt.xlabel("Message Arrival Time")
-    #     plt.ylabel("Cumulative Proportion of Nodes")
-    #     plt.xlim(0.0, max_arr_time_num)
-    #     plt.title(f"Message Arrival Times for D=8 & D_announce={announce}")
-    #     plt.grid(True)
-    #     plt.legend()
-    #     plt.savefig(f"./plots/cdf_malicious_{announce}.png")
-    #     print("plot saved")
