@@ -20,5 +20,6 @@ run: pubsub-shadow
 	python3 network_graph.py --nodeCount $(node_count) --targetConns $(target_conns) --publishStrategy $(publish_strategy) --output shadow.yaml
 	shadow --progress true -d $(filename) shadow.yaml
 	mv shadow.yaml $(filename)/shadow.yaml
+	mv graph.gml $(filename)/graph.gml
 
 .PHONY: all run clean extract_data
