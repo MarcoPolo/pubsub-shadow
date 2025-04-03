@@ -10,46 +10,27 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"time"
 
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pubsubpb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
-	topicName = "foobar"
+	topicName = "topic"
 )
 
 var (
-	countFlag       = flag.Int("count", 5000, "the number of nodes in the network")
-	targetFlag      = flag.Int("target", 70, "the target number of connected peers")
-	isMaliciousFlag = flag.Bool("malicious", false, "is the node malicious?")
-	DFlag           = flag.Int("D", 8, "mesh degree for gossipsub topics")
-	DannounceFlag   = flag.Int("Dannounce", 8, "announcesub degree for gossipsub topics")
-	intervalFlag    = flag.Int("interval", 700, "heartbeat interval in milliseconds")
-	msgSizeFlag     = flag.Int("size", 32, "message size in bytes")
-	numMsgsFlag     = flag.Int("n", 1, "number of messages published at the same time")
+	nodeCountFlag   = flag.Int("nodeCount", 100, "the number of nodes in the network")
+	targetConnsFlag = flag.Int("targetConns", 70, "the target number of connected peers")
+	publishStrategy = flag.String("publishStrategy", "inOrder", "publish strategy")
 )
 
-// creates a custom gossipsub parameter set.
-func pubsubGossipParam() pubsub.GossipSubParams {
-	gParams := pubsub.DefaultGossipSubParams()
-	gParams.Dlo = *DFlag - 2
-	gParams.D = *DFlag
-	gParams.Dhi = *DFlag + 4
-	gParams.Timeout = 1000 * time.Millisecond
-	gParams.HeartbeatInterval = time.Duration(*intervalFlag) * time.Millisecond
-	gParams.HistoryLength = 6
-	gParams.HistoryGossip = 3
-	gParams.Dannounce = *DannounceFlag
-	return gParams
-}
-
 // pubsubOptions creates a list of options to configure our router with.
-func pubsubOptions(ignoreIneed bool) []pubsub.Option {
+func pubsubOptions(logger *log.Logger) []pubsub.Option {
 	psOpts := []pubsub.Option{
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithNoAuthor(),
@@ -59,10 +40,8 @@ func pubsubOptions(ignoreIneed bool) []pubsub.Option {
 		pubsub.WithPeerOutboundQueueSize(600),
 		pubsub.WithMaxMessageSize(10 * 1 << 20),
 		pubsub.WithValidateQueueSize(600),
-		pubsub.WithGossipSubParams(pubsubGossipParam()),
-		pubsub.WithRawTracer(gossipTracer{}),
-		pubsub.WithEventTracer(eventTracer{}),
-		pubsub.WithIgnoreIneed(ignoreIneed),
+		pubsub.WithRawTracer(gossipTracer{logger: logger}),
+		pubsub.WithEventTracer(eventTracer{logger: logger}),
 	}
 
 	return psOpts
@@ -81,10 +60,13 @@ func nodePrivKey(id int) crypto.PrivKey {
 	return privkey
 }
 
-func main() {
-	log.SetOutput(os.Stdout)
-	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
+const blobSize = 128 << 10
+const subnetCount = 128
+const columnCount = 128
+const blobCount = 8
+const samplingRequirement = 8
 
+func main() {
 	flag.Parse()
 	ctx := context.Background()
 
@@ -92,16 +74,12 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("Count: %d\n", *countFlag)
-	log.Printf("Target: %d\n", *targetFlag)
-	log.Printf("Hostname: %s\n", hostname)
 
 	// parse for the node id
 	var nodeId int
 	if _, err := fmt.Sscanf(hostname, "node%d", &nodeId); err != nil {
 		panic(err)
 	}
-	log.Printf("NodeId: %d\n", nodeId)
 
 	// listen for incoming connections
 	h, err := libp2p.New(
@@ -111,32 +89,27 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log.Printf("PeerId: %s\n", h.ID())
-	log.Printf("Listening on: %v\n", h.Addrs())
 
-	// create a gossipsub node and subscribe to the topic
-	psOpts := pubsubOptions(*isMaliciousFlag)
-	ps, err := pubsub.NewGossipSub(ctx, h, psOpts...)
-	if err != nil {
-		panic(err)
-	}
-	topic, err := ps.Join(topicName)
-	if err != nil {
-		panic(err)
-	}
-	sub, err := topic.Subscribe()
-	if err != nil {
-		panic(err)
-	}
+	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
 
-	// wait 30 seconds for other nodes to bootstrap
-	time.Sleep(30 * time.Second)
+	RunExperiment(ctx, logger, h, nodeId, ShadowConnector{}, ExperimentParams{
+		PublishStrategy:     *publishStrategy,
+		ColumnCount:         columnCount,
+		SubnetCount:         columnCount,
+		SamplingRequirement: samplingRequirement,
+		NumberOfConnections: *targetConnsFlag,
+		BlobSize:            blobSize,
+		BlobCount:           blobCount,
+	})
+}
 
-	// discover peers
+type ShadowConnector struct{}
+
+func (c ShadowConnector) ConnectSome(ctx context.Context, h host.Host, nodeId int, count int) {
 	peers := make(map[int]struct{})
-	for len(h.Network().Peers()) < *targetFlag {
+	for len(h.Network().Peers()) < count {
 		// do node discovery by picking the node randomly
-		id := rand.Intn(*countFlag)
+		id := rand.Intn(*nodeCountFlag)
 		if _, ok := peers[id]; ok || id == nodeId {
 			continue
 		}
@@ -167,30 +140,22 @@ func main() {
 		peers[id] = struct{}{}
 		log.Printf("Connected to node%d: %s\n", id, addr)
 	}
+}
 
-	// wait until 00:02 for the meshes to be formed and so that the publish will be exactly at 00:02
-	time.Sleep(time.Until(time.Date(2000, time.January, 1, 0, 2, 0, 0, time.UTC)))
-
-	// if it's a turn for the node to publish, publish
-	if nodeId == 0 {
-		for i := 0; i < *numMsgsFlag; i++ {
-			msg := make([]byte, *msgSizeFlag)
-			rand.Read(msg) // it takes about a 50-100 us to fill the buffer on macpro 2019. Can be considered simulataneous
-			if err := topic.Publish(ctx, msg); err != nil {
-				log.Printf("Failed to publish message by %s\n", h.ID())
-			} else {
-				log.Printf("Published: (topic: %s, id: %s)\n", topicName, CalcID(msg))
-			}
-		}
+func subnetsForPeer(subnetCount int, maxSubnets int) []int {
+	if subnetCount > maxSubnets {
+		subnetCount = maxSubnets
 	}
-
-	for {
-		// block and wait to receive the next message
-		m, err := sub.Next(ctx)
-		if err != nil {
-			panic(err)
-		}
-		log.Printf("Received: (topic: %s, id: %s)\n", *m.Topic, CalcID(m.Message.Data))
+	subnets := make([]int, maxSubnets)
+	for i := range maxSubnets {
+		subnets[i] = i
 	}
-
+	if subnetCount == maxSubnets {
+		// No point in shuffling
+		return subnets
+	}
+	rand.Shuffle(len(subnets), func(i, j int) {
+		subnets[i], subnets[j] = subnets[j], subnets[i]
+	})
+	return subnets[:subnetCount]
 }
