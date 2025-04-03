@@ -24,6 +24,9 @@ type ExperimentParams struct {
 	SamplingRequirement int
 	BlobSize            int
 	BlobCount           int
+	// OnFinishPublishing is called when the node has finished publishing messages
+	// It returns true if the node should stop listening for messages and exit
+	OnFinishPublishing func() bool
 }
 
 type HostConnector interface {
@@ -140,8 +143,9 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	}
 
 	if nodeId == 0 {
-		time.Sleep(10 * time.Second)
-		cancel()
+		if params.OnFinishPublishing != nil && params.OnFinishPublishing() {
+			cancel()
+		}
 	}
 
 	wg.Wait()
