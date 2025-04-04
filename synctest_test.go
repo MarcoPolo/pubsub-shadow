@@ -37,7 +37,7 @@ func TestGossipSubPublishShuffle(t *testing.T) {
 func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 	synctest.Run(func() {
 		const blobCount = 32
-		const nodeCount = 1_000
+		const nodeCount = 1000
 		const numberOfConnections = 64
 		const qlogDir = ""
 
@@ -147,10 +147,9 @@ func (c *SimNetConnector) ConnectSome(ctx context.Context, h host.Host, nodeIdx 
 		c.t.Logf("connected %d out of %d nodes", x, len(c.allNodes))
 	}()
 
-	for j := 0; j < count; j++ {
+	for len(h.Network().Peers()) < count {
 		n := rand.Intn(len(c.allNodes))
 		if n == nodeIdx {
-			j--
 			continue
 		}
 
