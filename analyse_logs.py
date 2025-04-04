@@ -322,14 +322,21 @@ if __name__ == "__main__":
 
     timeline = {}
     # this value is tuned after running this script for a couple times
-    max_arr_time = 10.0
+    max_arr_time = 3.0
 
-    print("Parsing log files")
-    # Read Simulations from folder
-    timeline = extract_node_timelines(folder, nodeCount)
+    timeline_file = f"{folder}/analysed_timeline.json"
+    # Check if we have a timeline file
+    if os.path.exists(timeline_file):
+        print(f"Loading timeline from {timeline_file}")
+        with open(timeline_file, "r") as f:
+            timeline = json.load(f)
+    else:
+        print("Parsing log files")
+        # Read Simulations from folder
+        timeline = extract_node_timelines(folder, nodeCount)
 
-    with open(f"{folder}/analysed_timeline.json", "w") as f:
-        json.dump(timeline, f)
+        with open(timeline_file, "w") as f:
+            json.dump(timeline, f)
 
     print(f"\tAnalysis for {folder}")
     # only for one message published
@@ -363,4 +370,5 @@ if __name__ == "__main__":
     os.makedirs("./plots", exist_ok=True)
 
     plt.savefig(f"./plots/{folder}.png")
+    # plt.show()
     print("plot saved")
