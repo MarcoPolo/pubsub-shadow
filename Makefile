@@ -23,4 +23,11 @@ run: pubsub-shadow
 	mv shadow.yaml $(filename)/shadow.yaml
 	mv graph.gml $(filename)/graph.gml
 
+
+shadow-72-blobs-1000-rarestFirst.data:
+	$(MAKE) run publish_strategy=rarestFirst blob_count=72 node_count=1000 target_conns=64
+
+shadow-72-blobs-1000-inOrder.data:
+	$(MAKE) run publish_strategy=inOrder blob_count=72 node_count=1000 target_conns=64
+
 .PHONY: all run clean extract_data
