@@ -17,13 +17,13 @@ type ExperimentParams struct {
 	// inOrder: publish messages in order
 	// rarestFirst: publish messages in rarest first order
 	// shuffle: publish messages in random order
-	PublishStrategy     string
-	NumberOfConnections int
-	ColumnCount         int
-	SubnetCount         int
-	SamplingRequirement int
-	BlobSize            int
-	BlobCount           int
+	PublishStrategy           string
+	NumberOfConnections       int
+	ColumnCount               int
+	ColumnSamplingRequirement int
+	SubnetCount               int
+	BlobSize                  int
+	BlobCount                 int
 	// OnFinishPublishing is called when the node has finished publishing messages
 	// It returns true if the node should stop listening for messages and exit
 	OnFinishPublishing func() bool
@@ -53,9 +53,10 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 
 	var subnets []int
 	if nodeId == 0 {
-		subnets = subnetsForPeer(params.ColumnCount, params.ColumnCount)
+		subnets = subnetsForPeer(params.SubnetCount, params.SubnetCount)
 	} else {
-		subnets = subnetsForPeer(params.SamplingRequirement, params.ColumnCount)
+		subnetSampleRequirement := params.ColumnSamplingRequirement * params.SubnetCount / params.ColumnCount
+		subnets = subnetsForPeer(subnetSampleRequirement, params.SubnetCount)
 	}
 
 	var topics []*pubsub.Topic
@@ -105,19 +106,19 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 		for i := range msgHeader {
 			msgHeader[i] = ' '
 		}
-		msgsToPublish = make([][]byte, 0, params.SubnetCount)
-		for i := 0; i < params.SubnetCount; i++ {
+		msgsToPublish = make([][]byte, 0, params.ColumnCount)
+		for i := 0; i < params.ColumnCount; i++ {
 			topic := topics[i%len(topics)]
 			columnSize := 2 * params.BlobSize * params.BlobCount / params.ColumnCount
 			msg := make([]byte, columnSize)
 			rand.Read(msg) // it takes about a 50-100 us to fill the buffer on macpro 2019. Can be considered simulataneous
-			copy(msgHeader, fmt.Sprintf("msg %d on %s", i, topic.String()))
+			copy(msgHeader, fmt.Sprintf("msg %d on %s.  ", i, topic.String()))
 			copy(msg, msgHeader)
 			msgsToPublish = append(msgsToPublish, msg)
 			batchedMsg.AddMessage(CalcID(msg))
 		}
 
-		for i := 0; i < params.SubnetCount; i++ {
+		for i := 0; i < params.ColumnCount; i++ {
 			topic := topics[i%len(topics)]
 			msg := msgsToPublish[i]
 			if err := topic.Publish(ctx, msg, pubsub.WithBatchPublishing(batchedMsg)); err != nil {

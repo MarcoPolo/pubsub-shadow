@@ -31,15 +31,16 @@ func TestGossipSubPublishRarestFirst(t *testing.T) {
 }
 
 func TestGossipSubPublishShuffle(t *testing.T) {
+	t.Skip("skipping shuffle test. So far not better than rarestFirst")
 	testGossipSubPublishStrategy(t, "shuffle")
 }
 
 func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 	synctest.Run(func() {
-		const blobCount = 32
-		const nodeCount = 1000
+		const blobCount = 72
+		const nodeCount = 256
 		const numberOfConnections = 64
-		const qlogDir = ""
+		qlogDir := fmt.Sprintf("/tmp/gossipsub-%d-%s", subnetCount, publishStrategy)
 
 		const latency = 50 * time.Millisecond
 		const bandwidth = 20 * simlibp2p.OneMbps
@@ -82,7 +83,10 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		folder := fmt.Sprintf("synctest-%d-blobs-%d-%s.data", blobCount, nodeCount, publishStrategy)
+		folder := fmt.Sprintf("synctest-%d-blobs-%d-%s-%d-connections.data", blobCount, nodeCount, publishStrategy, numberOfConnections)
+		if _, err := os.Stat(folder); err == nil {
+			os.RemoveAll(folder)
+		}
 		err = os.MkdirAll(folder, 0755)
 		require.NoError(t, err)
 
@@ -99,13 +103,13 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 				defer f.Close()
 				logger := log.New(f, "", log.LstdFlags|log.Lmicroseconds)
 				RunExperiment(ctx, logger, node, nodeIdx, connector, ExperimentParams{
-					BlobSize:            blobSize,
-					BlobCount:           blobCount,
-					ColumnCount:         columnCount,
-					SubnetCount:         columnCount,
-					SamplingRequirement: samplingRequirement,
-					PublishStrategy:     publishStrategy,
-					NumberOfConnections: numberOfConnections,
+					BlobSize:                  blobSize,
+					BlobCount:                 blobCount,
+					ColumnCount:               columnCount,
+					SubnetCount:               subnetCount,
+					ColumnSamplingRequirement: columnSamplingRequirement,
+					PublishStrategy:           publishStrategy,
+					NumberOfConnections:       numberOfConnections,
 					OnFinishPublishing: func() bool {
 						// wait for 30 seconds before stopping the publisher
 						time.Sleep(30 * time.Second)

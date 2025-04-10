@@ -186,6 +186,10 @@ for i in range(node_count):
             }
         ],
     }
+    if i == 0:
+        config["hosts"][f"node{i}"]["processes"][0]["environment"] = {
+            "QLOGDIR": "/tmp/gossipsub-qlog",
+        }
 
 with open(args.output, "w") as file:
     yaml.dump(config, file)

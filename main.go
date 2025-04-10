@@ -21,6 +21,11 @@ import (
 
 const (
 	topicName = "topic"
+
+	blobSize                  = 128 << 10
+	subnetCount               = 128
+	columnCount               = 128
+	columnSamplingRequirement = 8
 )
 
 var (
@@ -61,11 +66,6 @@ func nodePrivKey(id int) crypto.PrivKey {
 	return privkey
 }
 
-const blobSize = 128 << 10
-const subnetCount = 128
-const columnCount = 128
-const samplingRequirement = 8
-
 func main() {
 	flag.Parse()
 	ctx := context.Background()
@@ -84,6 +84,7 @@ func main() {
 	// listen for incoming connections
 	h, err := libp2p.New(
 		libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/9000"),
+		// libp2p.ListenAddrStrings("/ip4/0.0.0.0/udp/9000/quic-v1"),
 		libp2p.Identity(nodePrivKey(nodeId)),
 	)
 	if err != nil {
@@ -97,13 +98,13 @@ func main() {
 	}
 
 	RunExperiment(ctx, logger, h, nodeId, ShadowConnector{}, ExperimentParams{
-		PublishStrategy:     *publishStrategy,
-		ColumnCount:         columnCount,
-		SubnetCount:         columnCount,
-		SamplingRequirement: samplingRequirement,
-		NumberOfConnections: *targetConnsFlag,
-		BlobSize:            blobSize,
-		BlobCount:           *blobCountFlag,
+		PublishStrategy:           *publishStrategy,
+		ColumnCount:               columnCount,
+		SubnetCount:               subnetCount,
+		ColumnSamplingRequirement: columnSamplingRequirement,
+		NumberOfConnections:       *targetConnsFlag,
+		BlobSize:                  blobSize,
+		BlobCount:                 *blobCountFlag,
 	})
 }
 
@@ -131,6 +132,7 @@ func (c ShadowConnector) ConnectSome(ctx context.Context, h host.Host, nodeId in
 			panic(err)
 		}
 		addr := fmt.Sprintf("/ip4/%s/tcp/9000/p2p/%s", addrs[0], peerId)
+		// addr := fmt.Sprintf("/ip4/%s/udp/9000/quic-v1/p2p/%s", addrs[0], peerId)
 		info, err := peer.AddrInfoFromString(addr)
 		if err != nil {
 			panic(err)

@@ -7,6 +7,7 @@ pubsub-shadow: *.go go.mod go.sum
 # Clean all generated shadow simulation files
 clean:
 	rm -rf shadow-*.data || true
+	rm -rf synctest-*.data || true
 	rm plots/* || true
 
 extract_data:

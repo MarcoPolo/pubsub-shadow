@@ -70,5 +70,5 @@ uv run analyse_logs.py synctest-8-blobs-256-rarestFirst.data
 
 Example for a shadow simulation:
 ```
-uv run analyse_logs.py shadow-8-blobs-256-inOrder.data
+uv run analyse_logs.py shadow-32-blobs-256-inOrder.data
 ```
