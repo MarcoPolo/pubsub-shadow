@@ -16,7 +16,6 @@ type ExperimentParams struct {
 	// PublishStrategy is the strategy to use for publishing messages
 	// inOrder: publish messages in order
 	// rarestFirst: publish messages in rarest first order
-	// shuffle: publish messages in random order
 	PublishStrategy           string
 	NumberOfConnections       int
 	ColumnCount               int
@@ -86,17 +85,17 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	// wait until 00:02 for the meshes to be formed and so that the publish will be exactly at 00:02
 	time.Sleep(time.Until(time.Date(2000, time.January, 1, 0, 2, 0, 0, time.UTC)))
 
-	var messageBatch *pubsub.MessageBatch
+	// var messageBatch *pubsub.MessageBatch
 
 	// if it's a turn for the node to publish, publish
 	if nodeId == 0 {
 		switch params.PublishStrategy {
 		case "inOrder":
-		case "rarestFirst":
-			messageBatch, err = pubsub.NewMessageBatch(ps)
-			if err != nil {
-				panic(err)
-			}
+		// case "rarestFirst":
+		// 	messageBatch, err = pubsub.NewMessageBatch(ps)
+		// 	if err != nil {
+		// 		panic(err)
+		// 	}
 		default:
 			panic(fmt.Sprintf("Invalid publish strategy: %s", params.PublishStrategy))
 		}
@@ -121,13 +120,14 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 		for i := 0; i < params.ColumnCount; i++ {
 			topic := topics[i%len(topics)]
 			msg := msgsToPublish[i]
-			var err error
-			if messageBatch != nil {
-				err = messageBatch.Add(ctx, topic, msg)
-			} else {
-				err = topic.Publish(ctx, msg)
-			}
+			// var err error
+			// if messageBatch != nil {
+			// 	err = messageBatch.Add(ctx, topic, msg)
+			// } else {
+			// 	err = topic.Publish(ctx, msg)
+			// }
 
+			err := topic.Publish(ctx, msg)
 			if err != nil {
 				logger.Printf("Failed to publish message by %s\n", h.ID())
 			} else {
@@ -135,9 +135,9 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 			}
 		}
 
-		if messageBatch != nil {
-			messageBatch.Publish()
-		}
+		// if messageBatch != nil {
+		// 	messageBatch.Publish()
+		// }
 	}
 
 	var wg sync.WaitGroup
