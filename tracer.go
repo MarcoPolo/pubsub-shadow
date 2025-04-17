@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"log"
 
@@ -69,7 +70,7 @@ func (t eventTracer) Trace(evt *pb.TraceEvent) {
 }
 
 func CalcID(msg []byte) string {
-	return string(msg[:24])
+	return strings.Trim(string(msg[:24]), " ")
 	// hasher := sha256.New()
 	// hasher.Write(msg)
 	// return base64.URLEncoding.EncodeToString(hasher.Sum(nil))

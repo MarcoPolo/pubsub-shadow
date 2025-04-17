@@ -30,15 +30,10 @@ func TestGossipSubPublishRarestFirst(t *testing.T) {
 	testGossipSubPublishStrategy(t, "rarestFirst")
 }
 
-func TestGossipSubPublishShuffle(t *testing.T) {
-	t.Skip("skipping shuffle test. So far not better than rarestFirst")
-	testGossipSubPublishStrategy(t, "shuffle")
-}
-
 func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 	synctest.Run(func() {
-		const blobCount = 72
-		const nodeCount = 256
+		const blobCount = 48
+		const nodeCount = 1_000
 		const numberOfConnections = 64
 		qlogDir := fmt.Sprintf("/tmp/gossipsub-%d-%s", subnetCount, publishStrategy)
 

@@ -86,16 +86,17 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	// wait until 00:02 for the meshes to be formed and so that the publish will be exactly at 00:02
 	time.Sleep(time.Until(time.Date(2000, time.January, 1, 0, 2, 0, 0, time.UTC)))
 
+	var messageBatch *pubsub.MessageBatch
+
 	// if it's a turn for the node to publish, publish
 	if nodeId == 0 {
-		batchedMsg := pubsub.NewBatchMessage()
 		switch params.PublishStrategy {
 		case "inOrder":
-			batchedMsg.Strategy = batchedMsg.InOrder
 		case "rarestFirst":
-			batchedMsg.Strategy = batchedMsg.RarestFirst
-		case "shuffle":
-			batchedMsg.Strategy = batchedMsg.ShuffleQueuedRPC
+			messageBatch, err = pubsub.NewMessageBatch(ps)
+			if err != nil {
+				panic(err)
+			}
 		default:
 			panic(fmt.Sprintf("Invalid publish strategy: %s", params.PublishStrategy))
 		}
@@ -115,17 +116,27 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 			copy(msgHeader, fmt.Sprintf("msg %d on %s.  ", i, topic.String()))
 			copy(msg, msgHeader)
 			msgsToPublish = append(msgsToPublish, msg)
-			batchedMsg.AddMessage(CalcID(msg))
 		}
 
 		for i := 0; i < params.ColumnCount; i++ {
 			topic := topics[i%len(topics)]
 			msg := msgsToPublish[i]
-			if err := topic.Publish(ctx, msg, pubsub.WithBatchPublishing(batchedMsg)); err != nil {
+			var err error
+			if messageBatch != nil {
+				err = messageBatch.Add(ctx, topic, msg)
+			} else {
+				err = topic.Publish(ctx, msg)
+			}
+
+			if err != nil {
 				logger.Printf("Failed to publish message by %s\n", h.ID())
 			} else {
 				logger.Printf("Published: (topic: %s, id: %s)\n", topic.String(), CalcID(msg))
 			}
+		}
+
+		if messageBatch != nil {
+			messageBatch.Publish()
 		}
 	}
 
