@@ -322,7 +322,7 @@ if __name__ == "__main__":
 
     timeline = {}
     # this value is tuned after running this script for a couple times
-    max_arr_time = 10.0
+    max_arr_time = 8.0
 
     timeline_file = f"{folder}/analysed_timeline.json"
     # Check if we have a timeline file
@@ -360,6 +360,7 @@ if __name__ == "__main__":
         plt.step(sorted_times, cdf, where="post", label=msgId)
 
     plt.xlim(0.0, max_arr_time)
+    plt.ylim(0.0, 100)
     plt.xlabel("Time")
     plt.ylabel("Number of Nodes")
     # plt.legend(fontsize="small")

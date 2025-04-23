@@ -23,25 +23,37 @@ import (
 )
 
 func TestGossipSubPublishInOrder(t *testing.T) {
-	testGossipSubPublishStrategy(t, "inOrder")
+	t.Skip("Skipping test")
+	// testGossipSubPublishStrategy(t, "inOrder")
 }
 
 func TestGossipSubPublishRarestFirst(t *testing.T) {
-	testGossipSubPublishStrategy(t, "rarestFirst")
+	t.Skip("Skipping test")
+	// testGossipSubPublishStrategy(t, "rarestFirst")
 }
 
-func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
+func TestGossipSubDAnnounce(t *testing.T) {
+	for _, DAnnounce := range []int{0, 7, 8} {
+		t.Run(fmt.Sprintf("DAnnounce=%d", DAnnounce), func(t *testing.T) {
+			runGossipSubTest(t, "inOrder", DAnnounce)
+		})
+	}
+}
+
+func runGossipSubTest(t *testing.T, publishStrategy string, DAnnounce int) {
 	synctest.Run(func() {
+		const D = 8
 		const blobCount = 48
 		const nodeCount = 1_000
 		const numberOfConnections = 64
-		qlogDir := fmt.Sprintf("/tmp/gossipsub-%d-%s", subnetCount, publishStrategy)
+		// qlogDir := fmt.Sprintf("/tmp/gossipsub-%d-%s", subnetCount, publishStrategy)
+		qlogDir := ""
 
 		const latency = 50 * time.Millisecond
 		const bandwidth = 20 * simlibp2p.OneMbps
 
-		publisherBW := 50 * simlibp2p.OneMbps
-		publisherLatency := 20 * time.Millisecond
+		publisherBW := 1000 * simlibp2p.OneMbps
+		publisherLatency := 10 * time.Millisecond
 		publisherSettings := simconn.NodeBiDiLinkSettings{
 			Downlink: simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency / 2},
 			Uplink:   simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency},
@@ -78,7 +90,7 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		folder := fmt.Sprintf("synctest-%d-blobs-%d-%s-%d-connections.data", blobCount, nodeCount, publishStrategy, numberOfConnections)
+		folder := fmt.Sprintf("synctest-%d-blobs-%d-%s-%d-connections-%d-dannounce.data", blobCount, nodeCount, publishStrategy, numberOfConnections, DAnnounce)
 		if _, err := os.Stat(folder); err == nil {
 			os.RemoveAll(folder)
 		}
@@ -98,6 +110,8 @@ func testGossipSubPublishStrategy(t *testing.T, publishStrategy string) {
 				defer f.Close()
 				logger := log.New(f, "", log.LstdFlags|log.Lmicroseconds)
 				RunExperiment(ctx, logger, node, nodeIdx, connector, ExperimentParams{
+					D:                         D,
+					DAnnounce:                 DAnnounce,
 					BlobSize:                  blobSize,
 					BlobCount:                 blobCount,
 					ColumnCount:               columnCount,

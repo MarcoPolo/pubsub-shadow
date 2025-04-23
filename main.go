@@ -35,8 +35,18 @@ var (
 	blobCountFlag   = flag.Int("blobCount", 0, "the number of blobs to publish")
 )
 
+func pubsubGossipParam(D, DAnnounce int) pubsub.GossipSubParams {
+	gParams := pubsub.DefaultGossipSubParams()
+	gParams.Dannounce = DAnnounce
+	gParams.Dlo = D - 2
+	gParams.D = D
+	gParams.Dhi = D + 4
+
+	return gParams
+}
+
 // pubsubOptions creates a list of options to configure our router with.
-func pubsubOptions(logger *log.Logger) []pubsub.Option {
+func pubsubOptions(logger *log.Logger, D, DAnnounce int) []pubsub.Option {
 	psOpts := []pubsub.Option{
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithNoAuthor(),
@@ -48,6 +58,7 @@ func pubsubOptions(logger *log.Logger) []pubsub.Option {
 		pubsub.WithValidateQueueSize(600),
 		pubsub.WithRawTracer(gossipTracer{logger: logger}),
 		pubsub.WithEventTracer(eventTracer{logger: logger}),
+		pubsub.WithGossipSubParams(pubsubGossipParam(D, DAnnounce)),
 	}
 
 	return psOpts

@@ -110,6 +110,7 @@ require (
 //replace github.com/libp2p/go-libp2p-pubsub => github.com/libp2p/go-libp2p-pubsub v0.13.2-0.20250415173554-a0e0a00f52ba
 
 // This one has Pop's IANNOUNCE/INEED
-replace github.com/libp2p/go-libp2p-pubsub => github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250305042130-cfecb8a59877
+//replace github.com/libp2p/go-libp2p-pubsub => github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250305042130-cfecb8a59877
+replace github.com/libp2p/go-libp2p-pubsub => ../../../pl/libp2p/go-libp2p-pubsub
 
 replace github.com/libp2p/go-libp2p => github.com/libp2p/go-libp2p v0.41.1-0.20250403044410-708bc12b01b4

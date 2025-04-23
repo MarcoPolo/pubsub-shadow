@@ -13,6 +13,8 @@ import (
 )
 
 type ExperimentParams struct {
+	D         int
+	DAnnounce int
 	// PublishStrategy is the strategy to use for publishing messages
 	// inOrder: publish messages in order
 	// rarestFirst: publish messages in rarest first order
@@ -34,6 +36,9 @@ type HostConnector interface {
 }
 
 func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId int, connector HostConnector, params ExperimentParams) {
+	if params.D == 0 {
+		panic("D must be set")
+	}
 	logger.Printf("Publish Strategy: %s\n", params.PublishStrategy)
 	logger.Printf("NodeId: %d\n", nodeId)
 	logger.Printf("PeerId: %s\n", h.ID())
@@ -44,7 +49,7 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	}
 
 	// create a gossipsub node and subscribe to the topic
-	psOpts := pubsubOptions(logger)
+	psOpts := pubsubOptions(logger, params.D, params.DAnnounce)
 	ps, err := pubsub.NewGossipSub(ctx, h, psOpts...)
 	if err != nil {
 		panic(err)
@@ -140,11 +145,14 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 		// }
 	}
 
+	if nodeId == 0 {
+		if params.OnFinishPublishing != nil && params.OnFinishPublishing() {
+			return
+		}
+	}
+
 	var wg sync.WaitGroup
 	wg.Add(len(subs))
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	for _, sub := range subs {
 		go func(sub *pubsub.Subscription) {
 			defer wg.Done()
@@ -161,12 +169,5 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 			}
 		}(sub)
 	}
-
-	if nodeId == 0 {
-		if params.OnFinishPublishing != nil && params.OnFinishPublishing() {
-			cancel()
-		}
-	}
-
 	wg.Wait()
 }
