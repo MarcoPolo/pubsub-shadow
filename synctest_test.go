@@ -22,41 +22,101 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGossipSubPublishInOrder(t *testing.T) {
-	t.Skip("Skipping test")
-	// testGossipSubPublishStrategy(t, "inOrder")
-}
+// func TestGossipSubPublishInOrder(t *testing.T) {
+// 	t.Skip("Skipping test")
+// 	// testGossipSubPublishStrategy(t, "inOrder")
+// }
 
-func TestGossipSubPublishRarestFirst(t *testing.T) {
-	t.Skip("Skipping test")
-	// testGossipSubPublishStrategy(t, "rarestFirst")
-}
+// func TestGossipSubPublishRarestFirst(t *testing.T) {
+// 	t.Skip("Skipping test")
+// 	// testGossipSubPublishStrategy(t, "rarestFirst")
+// }
 
-func TestGossipSubDAnnounce(t *testing.T) {
-	for _, DAnnounce := range []int{0, 7, 8} {
-		t.Run(fmt.Sprintf("DAnnounce=%d", DAnnounce), func(t *testing.T) {
-			runGossipSubTest(t, "inOrder", DAnnounce)
-		})
+// func TestGossipSubDAnnounce(t *testing.T) {
+// 	for _, DAnnounce := range []int{0, 7, 8} {
+// 		t.Run(fmt.Sprintf("DAnnounce=%d", DAnnounce), func(t *testing.T) {
+// 			runGossipSubTest(t, "inOrder", DAnnounce, 8)
+// 		})
+// 	}
+// }
+
+// func TestGossipSubSmallerDegree(t *testing.T) {
+// 	for _, D := range []int{2, 3, 4, 6, 8} {
+// 		t.Run(fmt.Sprintf("D=%d", D), func(t *testing.T) {
+// 			runGossipSubTest(t, "inOrder", 0, D)
+// 		})
+// 	}
+// }
+
+func TestGossipSubTimelyGossip(t *testing.T) {
+	const blobCount = 48
+	const nodeCount = 625
+	const numberOfConnections = 10
+	const publishStrategy = "inOrder"
+	for _, D := range []int{1, 2, 3} {
+		for _, Dlazy := range []int{5, 7, 8} {
+			t.Run(fmt.Sprintf("D=%d,Dlazy=%d", D, Dlazy), func(t *testing.T) {
+				expParams := ExperimentParams{
+					D:                         D,
+					Dlazy:                     Dlazy,
+					CellSize:                  cellSize,
+					BlobCount:                 blobCount,
+					ColumnCount:               columnCount,
+					SubnetCount:               subnetCount,
+					ColumnSamplingRequirement: columnSamplingRequirement,
+					PublishStrategy:           publishStrategy,
+					NumberOfConnections:       numberOfConnections,
+					NodeCount:                 nodeCount,
+					OnFinishPublishing: func() bool {
+						// wait for 30 seconds before stopping the publisher
+						time.Sleep(30 * time.Second)
+						return true
+					},
+				}
+
+				runGossipSubTest(t, publishStrategy, expParams)
+			})
+		}
+		// for _, Dannounce := range []int{0, D - 1, D} {
+		// 	t.Run(fmt.Sprintf("D=%d,Dannounce=%d", D, Dannounce), func(t *testing.T) {
+		// 		expParams := ExperimentParams{
+		// 			D:                         D,
+		// 			Dlazy:                     0,
+		// 			DAnnounce:                 Dannounce,
+		// 			CellSize:                  cellSize,
+		// 			BlobCount:                 blobCount,
+		// 			ColumnCount:               columnCount,
+		// 			SubnetCount:               subnetCount,
+		// 			ColumnSamplingRequirement: columnSamplingRequirement,
+		// 			PublishStrategy:           publishStrategy,
+		// 			NumberOfConnections:       numberOfConnections,
+		// 			NodeCount:                 nodeCount,
+		// 			OnFinishPublishing: func() bool {
+		// 				// wait for 30 seconds before stopping the publisher
+		// 				time.Sleep(30 * time.Second)
+		// 				return true
+		// 			},
+		// 		}
+
+		// 		runGossipSubTest(t, publishStrategy, expParams)
+		// 	})
+		// }
 	}
 }
 
-func runGossipSubTest(t *testing.T, publishStrategy string, DAnnounce int) {
+func runGossipSubTest(t *testing.T, publishStrategy string, expParams ExperimentParams) {
 	synctest.Run(func() {
-		const D = 8
-		const blobCount = 48
-		const nodeCount = 1_000
-		const numberOfConnections = 64
 		// qlogDir := fmt.Sprintf("/tmp/gossipsub-%d-%s", subnetCount, publishStrategy)
 		qlogDir := ""
 
-		const latency = 50 * time.Millisecond
-		const bandwidth = 20 * simlibp2p.OneMbps
+		const latency = 20 * time.Millisecond
+		const bandwidth = 50 * simlibp2p.OneMbps
 
-		publisherBW := 1000 * simlibp2p.OneMbps
-		publisherLatency := 10 * time.Millisecond
+		publisherBW := 50 * simlibp2p.OneMbps
+		publisherLatency := 20 * time.Millisecond
 		publisherSettings := simconn.NodeBiDiLinkSettings{
 			Downlink: simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency / 2},
-			Uplink:   simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency},
+			Uplink:   simconn.LinkSettings{BitsPerSecond: publisherBW, Latency: publisherLatency / 2},
 		}
 
 		network, meta, err := simlibp2p.SimpleLibp2pNetwork([]simlibp2p.NodeLinkSettingsAndCount{
@@ -65,7 +125,7 @@ func runGossipSubTest(t *testing.T, publishStrategy string, DAnnounce int) {
 			{LinkSettings: simconn.NodeBiDiLinkSettings{
 				Downlink: simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2}, // Divide by two since this is latency for each direction
 				Uplink:   simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2},
-			}, Count: nodeCount - 1},
+			}, Count: expParams.NodeCount - 1},
 		}, simlibp2p.NetworkSettings{
 			UseBlankHost: true,
 			QUICReuseOptsForHostIdx: func(idx int) []quicreuse.Option {
@@ -90,14 +150,14 @@ func runGossipSubTest(t *testing.T, publishStrategy string, DAnnounce int) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		folder := fmt.Sprintf("synctest-%d-blobs-%d-%s-%d-connections-%d-dannounce.data", blobCount, nodeCount, publishStrategy, numberOfConnections, DAnnounce)
+		folder := fmt.Sprintf("synctest-%d-blobs-%d-%s-%d-connections-%d-dannounce-%d-D-%d-Dlazy.data", expParams.BlobCount, expParams.NodeCount, expParams.PublishStrategy, expParams.NumberOfConnections, expParams.DAnnounce, expParams.D, expParams.Dlazy)
 		if _, err := os.Stat(folder); err == nil {
 			os.RemoveAll(folder)
 		}
 		err = os.MkdirAll(folder, 0755)
 		require.NoError(t, err)
 
-		connector := newSimNetConnector(t, meta.Nodes, 16)
+		connector := newSimNetConnector(t, meta.Nodes, 2)
 
 		var wg sync.WaitGroup
 		for nodeIdx, node := range meta.Nodes {
@@ -109,22 +169,7 @@ func runGossipSubTest(t *testing.T, publishStrategy string, DAnnounce int) {
 				require.NoError(t, err)
 				defer f.Close()
 				logger := log.New(f, "", log.LstdFlags|log.Lmicroseconds)
-				RunExperiment(ctx, logger, node, nodeIdx, connector, ExperimentParams{
-					D:                         D,
-					DAnnounce:                 DAnnounce,
-					BlobSize:                  blobSize,
-					BlobCount:                 blobCount,
-					ColumnCount:               columnCount,
-					SubnetCount:               subnetCount,
-					ColumnSamplingRequirement: columnSamplingRequirement,
-					PublishStrategy:           publishStrategy,
-					NumberOfConnections:       numberOfConnections,
-					OnFinishPublishing: func() bool {
-						// wait for 30 seconds before stopping the publisher
-						time.Sleep(30 * time.Second)
-						return true
-					},
-				})
+				RunExperiment(ctx, logger, node, nodeIdx, connector, expParams)
 				if nodeIdx == 0 {
 					cancel()
 				}
@@ -157,7 +202,10 @@ func (c *SimNetConnector) ConnectSome(ctx context.Context, h host.Host, nodeIdx 
 		if x == int64(len(c.allNodes)) {
 			close(c.connectionsDone)
 		}
-		c.t.Logf("connected %d out of %d nodes", x, len(c.allNodes))
+		if x%100 == 0 {
+			c.t.Logf("connected %d out of %d nodes", x, len(c.allNodes))
+			c.t.Logf("peers: %v", len(h.Network().Peers()))
+		}
 	}()
 
 	for len(h.Network().Peers()) < count {

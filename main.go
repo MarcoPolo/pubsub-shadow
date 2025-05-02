@@ -22,10 +22,10 @@ import (
 const (
 	topicName = "topic"
 
-	blobSize                  = 128 << 10
-	subnetCount               = 128
-	columnCount               = 128
-	columnSamplingRequirement = 8
+	cellSize                  = (2 << 10)
+	subnetCount               = 1
+	columnCount               = 1
+	columnSamplingRequirement = 1
 )
 
 var (
@@ -35,18 +35,23 @@ var (
 	blobCountFlag   = flag.Int("blobCount", 0, "the number of blobs to publish")
 )
 
-func pubsubGossipParam(D, DAnnounce int) pubsub.GossipSubParams {
+func pubsubGossipParam(params ExperimentParams) pubsub.GossipSubParams {
 	gParams := pubsub.DefaultGossipSubParams()
-	gParams.Dannounce = DAnnounce
-	gParams.Dlo = D - 2
-	gParams.D = D
-	gParams.Dhi = D + 4
+	gParams.Dannounce = params.DAnnounce
+	gParams.Dlo = params.D
+	gParams.D = params.D
+	gParams.Dhi = params.D
+	gParams.Dscore = 0
+	gParams.Dout = 0
+	gParams.Dlazy = params.Dlazy
+	gParams.GossipFactor = 0
+	gParams.GossipRetransmission = 10
 
 	return gParams
 }
 
 // pubsubOptions creates a list of options to configure our router with.
-func pubsubOptions(logger *log.Logger, D, DAnnounce int) []pubsub.Option {
+func pubsubOptions(logger *log.Logger, params ExperimentParams) []pubsub.Option {
 	psOpts := []pubsub.Option{
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithNoAuthor(),
@@ -58,7 +63,7 @@ func pubsubOptions(logger *log.Logger, D, DAnnounce int) []pubsub.Option {
 		pubsub.WithValidateQueueSize(600),
 		pubsub.WithRawTracer(gossipTracer{logger: logger}),
 		pubsub.WithEventTracer(eventTracer{logger: logger}),
-		pubsub.WithGossipSubParams(pubsubGossipParam(D, DAnnounce)),
+		pubsub.WithGossipSubParams(pubsubGossipParam(params)),
 	}
 
 	return psOpts
@@ -114,7 +119,7 @@ func main() {
 		SubnetCount:               subnetCount,
 		ColumnSamplingRequirement: columnSamplingRequirement,
 		NumberOfConnections:       *targetConnsFlag,
-		BlobSize:                  blobSize,
+		CellSize:                  cellSize,
 		BlobCount:                 *blobCountFlag,
 	})
 }

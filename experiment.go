@@ -14,6 +14,7 @@ import (
 
 type ExperimentParams struct {
 	D         int
+	Dlazy     int
 	DAnnounce int
 	// PublishStrategy is the strategy to use for publishing messages
 	// inOrder: publish messages in order
@@ -23,11 +24,12 @@ type ExperimentParams struct {
 	ColumnCount               int
 	ColumnSamplingRequirement int
 	SubnetCount               int
-	BlobSize                  int
+	CellSize                  int
 	BlobCount                 int
 	// OnFinishPublishing is called when the node has finished publishing messages
 	// It returns true if the node should stop listening for messages and exit
 	OnFinishPublishing func() bool
+	NodeCount          int
 }
 
 type HostConnector interface {
@@ -49,7 +51,7 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 	}
 
 	// create a gossipsub node and subscribe to the topic
-	psOpts := pubsubOptions(logger, params.D, params.DAnnounce)
+	psOpts := pubsubOptions(logger, params)
 	ps, err := pubsub.NewGossipSub(ctx, h, psOpts...)
 	if err != nil {
 		panic(err)
@@ -114,7 +116,7 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 		msgsToPublish = make([][]byte, 0, params.ColumnCount)
 		for i := 0; i < params.ColumnCount; i++ {
 			topic := topics[i%len(topics)]
-			columnSize := 2 * params.BlobSize * params.BlobCount / params.ColumnCount
+			columnSize := 2 * params.CellSize * params.BlobCount / params.ColumnCount
 			msg := make([]byte, columnSize)
 			rand.Read(msg) // it takes about a 50-100 us to fill the buffer on macpro 2019. Can be considered simulataneous
 			copy(msgHeader, fmt.Sprintf("msg %d on %s.  ", i, topic.String()))
@@ -139,6 +141,13 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 				logger.Printf("Published: (topic: %s, id: %s)\n", topic.String(), CalcID(msg))
 			}
 		}
+		// timelyGossip, err := pubsub.NewTimelyGossip(ps)
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// for i := 0; i < params.ColumnCount; i++ {
+		// 	timelyGossip.TryTimelyGossip(topics[i%len(topics)].String())
+		// }
 
 		// if messageBatch != nil {
 		// 	messageBatch.Publish()

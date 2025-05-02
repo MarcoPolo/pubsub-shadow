@@ -360,7 +360,7 @@ if __name__ == "__main__":
         plt.step(sorted_times, cdf, where="post", label=msgId)
 
     plt.xlim(0.0, max_arr_time)
-    plt.ylim(0.0, 100)
+    # plt.ylim(0.0, 100)
     plt.xlabel("Time")
     plt.ylabel("Number of Nodes")
     # plt.legend(fontsize="small")
