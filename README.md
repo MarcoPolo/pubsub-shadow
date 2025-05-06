@@ -1,5 +1,62 @@
 # pubsub-shadow
 
+## Overview
+
+This repo hopes to serve as a benchmark to compare various GossipSub proposals
+and how they interact with the PeerDAS use case.
+
+## The benchmark
+
+The benchmark runs the following simulations:
+
+**Clear Skies**
+This simluation runs the following steps:
+1. Warmup
+  1. This phase sends a 64 messages throught the network.
+2. Message dissemenation
+  1. This phase sends 64 messages.
+
+**High Churn**
+- TODO
+
+**Sudden node failures**
+- TODO
+
+**Adversarial nodes**
+- TODO
+
+Simulations are evaluated by:
+- Reliability
+- Latency to disseminate messages to 90%, 95%, 99%, and 100% of the network
+- The average number of duplicates in the network
+  - Maybe the p95 number of duplicates in the network
+- Average bandwidth usage per node
+  - Maybe p95 bandwidth usage per non-publishing node
+
+## Future Benchmarks
+
+In the future, I'd like to add the following benchmarks:
+- Simulating at least 10,000 nodes with 128 subnets.
+- Something with Ethshadowe
+
+## Defining the network
+
+TODO explain. Network is deterministic. Pass a seed
+
+## Running your implementation in the simulation
+
+TODO explain. you accept a json blob as your experiment params.
+
+### Message id
+TODO explain. Read u64 from first 8 bytes of message big endian. That's your id
+
+### Publish schedule
+TODO explain which node is in charge of publishing.
+
+### Metrics
+
+TODO explain structured log format
+
 ## Requirements
 
 - Go 1.24 for synctest experiments

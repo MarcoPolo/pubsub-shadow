@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"math/rand"
 	"net"
 	"os"
+	"strings"
 
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -29,41 +32,25 @@ const (
 )
 
 var (
-	nodeCountFlag   = flag.Int("nodeCount", 100, "the number of nodes in the network")
-	targetConnsFlag = flag.Int("targetConns", 70, "the target number of connected peers")
-	publishStrategy = flag.String("publishStrategy", "", "publish strategy")
-	blobCountFlag   = flag.Int("blobCount", 0, "the number of blobs to publish")
+	paramsFileFlag = flag.String("params", "", "the path to the params file")
 )
 
-func pubsubGossipParam(params ExperimentParams) pubsub.GossipSubParams {
-	gParams := pubsub.DefaultGossipSubParams()
-	gParams.Dannounce = params.DAnnounce
-	gParams.Dlo = params.D
-	gParams.D = params.D
-	gParams.Dhi = params.D
-	gParams.Dscore = 0
-	gParams.Dout = 0
-	gParams.Dlazy = params.Dlazy
-	gParams.GossipFactor = 0
-	gParams.GossipRetransmission = 10
-
-	return gParams
-}
-
 // pubsubOptions creates a list of options to configure our router with.
-func pubsubOptions(logger *log.Logger, params ExperimentParams) []pubsub.Option {
+func pubsubOptions(logger *log.Logger, params pubsub.GossipSubParams) []pubsub.Option {
+	tr := gossipTracer{logger: slog.New(slog.NewJSONHandler(logger.Writer(), nil)).With("service", "gossipsub")}
 	psOpts := []pubsub.Option{
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithNoAuthor(),
 		pubsub.WithMessageIdFn(func(pmsg *pubsubpb.Message) string {
+			// TODO: change
 			return CalcID(pmsg.Data)
 		}),
 		pubsub.WithPeerOutboundQueueSize(600),
-		pubsub.WithMaxMessageSize(10 * 1 << 20),
 		pubsub.WithValidateQueueSize(600),
-		pubsub.WithRawTracer(gossipTracer{logger: logger}),
-		pubsub.WithEventTracer(eventTracer{logger: logger}),
-		pubsub.WithGossipSubParams(pubsubGossipParam(params)),
+		pubsub.WithMaxMessageSize(10 * 1 << 20),
+		pubsub.WithGossipSubParams(params),
+		pubsub.WithRawTracer(&tr),
+		pubsub.WithEventTracer(&tr),
 	}
 
 	return psOpts
@@ -82,9 +69,38 @@ func nodePrivKey(id int) crypto.PrivKey {
 	return privkey
 }
 
+func readParams(path string) (ExperimentParams, error) {
+	if *paramsFileFlag == "" {
+		return ExperimentParams{}, fmt.Errorf("params file must be set")
+	}
+	if !strings.HasSuffix(*paramsFileFlag, ".json") {
+		return ExperimentParams{}, fmt.Errorf("params file must be a .json file")
+	}
+
+	if _, err := os.Stat(*paramsFileFlag); os.IsNotExist(err) {
+		return ExperimentParams{}, fmt.Errorf("params file does not exist")
+	}
+	f, err := os.Open(*paramsFileFlag)
+	if err != nil {
+		return ExperimentParams{}, fmt.Errorf("failed to open params file: %w", err)
+	}
+	defer f.Close()
+
+	var params ExperimentParams
+	params.GossipSubParams = pubsub.DefaultGossipSubParams()
+	if err := json.NewDecoder(f).Decode(&params); err != nil {
+		return ExperimentParams{}, fmt.Errorf("failed to decode params file: %w", err)
+	}
+	return params, nil
+}
+
 func main() {
 	flag.Parse()
 	ctx := context.Background()
+	params, err := readParams(*paramsFileFlag)
+	if err != nil {
+		panic(err)
+	}
 
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -96,6 +112,7 @@ func main() {
 	if _, err := fmt.Sscanf(hostname, "node%d", &nodeId); err != nil {
 		panic(err)
 	}
+	fmt.Printf("Node ID: %d\n", nodeId)
 
 	// listen for incoming connections
 	h, err := libp2p.New(
@@ -109,28 +126,18 @@ func main() {
 
 	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
 
-	if *blobCountFlag == 0 {
-		panic("blobCount must be set")
-	}
-
-	RunExperiment(ctx, logger, h, nodeId, ShadowConnector{}, ExperimentParams{
-		PublishStrategy:           *publishStrategy,
-		ColumnCount:               columnCount,
-		SubnetCount:               subnetCount,
-		ColumnSamplingRequirement: columnSamplingRequirement,
-		NumberOfConnections:       *targetConnsFlag,
-		CellSize:                  cellSize,
-		BlobCount:                 *blobCountFlag,
-	})
+	RunExperiment(ctx, logger, h, nodeId, &ShadowConnector{NodeCount: params.NodeCount}, params)
 }
 
-type ShadowConnector struct{}
+type ShadowConnector struct {
+	NodeCount int
+}
 
-func (c ShadowConnector) ConnectSome(ctx context.Context, h host.Host, nodeId int, count int) {
+func (c *ShadowConnector) ConnectSome(ctx context.Context, h host.Host, nodeId int, count int) {
 	peers := make(map[int]struct{})
 	for len(h.Network().Peers()) < count {
 		// do node discovery by picking the node randomly
-		id := rand.Intn(*nodeCountFlag)
+		id := rand.Intn(c.NodeCount)
 		if _, ok := peers[id]; ok || id == nodeId {
 			continue
 		}

@@ -1,5 +1,6 @@
 *.swp
 /shadow.data
+synctest*.data
 /shadow.yaml
 /graph.gml
 =======
@@ -7,6 +8,8 @@
 /**/*/*.tar.gz
 /**.tar.gz
 /pubsub-shadow
+**/gossipsub-bin
+params.json
 /venv
 /plots
 .DS_Store

@@ -1,10 +1,40 @@
 # usage: python network_graph.py [node-count]
 from dataclasses import dataclass
+import os
 import random
 import networkx as nx
-import sys
 import yaml
 import argparse
+from typing import Callable, List
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--seed", type=int, required=False)
+parser.add_argument("--node_count", type=int, required=True)
+parser.add_argument("--output", type=str, required=True)
+parser.add_argument("--binary-and-percentage", type=str, required=True)
+args = parser.parse_args()
+
+
+def parse_binary_and_percentage(binary_and_percentage: str) -> Callable[[], str]:
+    binaries: List[str] = []
+    weights: List[int] = []
+    sum: int = 0
+    for arg in binary_and_percentage.split(" "):
+        binary, percentage = arg.split("=")
+        binaries.append(binary)
+        weights.append(int(percentage))
+        sum += int(percentage)
+
+    if sum != 100:
+        raise ValueError("Percentages must sum to 100")
+
+    return lambda: random.choices(binaries, weights=weights)[0]
+
+
+if args.seed is None:
+    args.seed = 1
+
+random.seed(args.seed)
 
 G = nx.DiGraph()
 
@@ -124,19 +154,6 @@ edges = [
     Edge(west_asia, west_asia, 5),
 ]
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--nodeCount", type=int, required=True)
-parser.add_argument("--targetConns", type=int, required=True)
-parser.add_argument("--publishStrategy", type=str, required=True)
-parser.add_argument("--output", type=str, required=True)
-parser.add_argument("--blobCount", type=int, required=True)
-args = parser.parse_args()
-
-node_count = args.nodeCount
-target_conn = args.targetConns
-publish_strategy = args.publishStrategy
-blob_count = args.blobCount
-
 ids = {}
 for node_type in node_types:
     for location in locations:
@@ -169,27 +186,22 @@ with open("shadow.template.yaml", "r") as file:
 config["network"] = {"graph": {"type": "gml", "file": {"path": "graph.gml"}}}
 
 config["hosts"] = {}
-for i in range(node_count):
+get_binary = parse_binary_and_percentage(args.binary_and_percentage)
+
+for i in range(args.node_count):
     location = random.choices(locations, map(lambda lc: lc.weight, locations))[0]
-    if i == 0:
-        node_type = fullnode
-    else:
-        node_type = random.choices(node_types, map(lambda nt: nt.weight, node_types))[0]
+    node_type = random.choices(node_types, map(lambda nt: nt.weight, node_types))[0]
 
     config["hosts"][f"node{i}"] = {
         "network_node_id": ids[f"{location.name}-{node_type.name}"],
         "processes": [
             {
-                "args": f"-publishStrategy {publish_strategy} -nodeCount {node_count} -targetConns {target_conn} -blobCount {blob_count}",
-                "expected_final_state": "running",
-                "path": "./pubsub-shadow",
+                "args": f"--params {os.getcwd()}/params.json",
+                # "expected_final_state": "running",
+                "path": get_binary(),
             }
         ],
     }
-    if i == 0:
-        config["hosts"][f"node{i}"]["processes"][0]["environment"] = {
-            "QLOGDIR": "/tmp/gossipsub-qlog",
-        }
 
 with open(args.output, "w") as file:
     yaml.dump(config, file)
