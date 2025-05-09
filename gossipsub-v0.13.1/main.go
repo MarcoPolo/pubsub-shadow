@@ -70,17 +70,17 @@ func nodePrivKey(id int) crypto.PrivKey {
 }
 
 func readParams(path string) (ExperimentParams, error) {
-	if *paramsFileFlag == "" {
+	if path == "" {
 		return ExperimentParams{}, fmt.Errorf("params file must be set")
 	}
-	if !strings.HasSuffix(*paramsFileFlag, ".json") {
+	if !strings.HasSuffix(path, ".json") {
 		return ExperimentParams{}, fmt.Errorf("params file must be a .json file")
 	}
 
-	if _, err := os.Stat(*paramsFileFlag); os.IsNotExist(err) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return ExperimentParams{}, fmt.Errorf("params file does not exist")
 	}
-	f, err := os.Open(*paramsFileFlag)
+	f, err := os.Open(path)
 	if err != nil {
 		return ExperimentParams{}, fmt.Errorf("failed to open params file: %w", err)
 	}

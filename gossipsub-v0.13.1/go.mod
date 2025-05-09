@@ -111,6 +111,10 @@ require (
 
 // This one has Pop's IANNOUNCE/INEED
 // replace github.com/libp2p/go-libp2p-pubsub => github.com/ppopth/go-libp2p-pubsub v0.11.1-0.20250305042130-cfecb8a59877
+
+// My version that handles edge case
+replace github.com/libp2p/go-libp2p-pubsub => github.com/marcopolo/go-libp2p-pubsub v0.12.1-0.20250424165205-7cfe7ed8eec5
+
 // My fork
 // replace github.com/libp2p/go-libp2p-pubsub => ../../../../pl/libp2p/go-libp2p-pubsub
 

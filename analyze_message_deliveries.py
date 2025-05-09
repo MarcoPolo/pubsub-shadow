@@ -11,9 +11,6 @@ duplicate_count_by_message_and_node = defaultdict(lambda: defaultdict(int))
 peer_id_to_node_id = dict()
 node_id_to_peer_id = dict()
 
-# Read folder from input
-folder = sys.argv[1]
-
 
 def nodeIDFromFilename(filename):
     return filename.split(".")[0]
@@ -38,7 +35,9 @@ def logfile_iterator(folder):
             yield os.path.join(folder, file)
 
 
-def main():
+def analyse_message_deliveries(folder):
+    analysis_txt = []
+
     for file in logfile_iterator(folder):
         with open(file, "r") as f:
             node_id = ""
@@ -73,15 +72,15 @@ def main():
     msg_ids = []
     time_diffs = []
 
+    total_nodes = len(node_id_to_peer_id)
     for msgID, deliveries in messages.items():
         deliveries.sort(key=lambda x: x[0])
         time_diff = (deliveries[-1][0] - deliveries[0][0]).total_seconds()
         msg_ids.append(msgID)
         time_diffs.append(time_diff)
-        avg_duplicate_count = duplicate_count[msgID] / len(
-            duplicate_count_by_message_and_node[msgID]
-        )
-        print(f"{msgID} {time_diff}s {avg_duplicate_count}")
+        avg_duplicate_count = duplicate_count[msgID] / total_nodes
+        reached = len(deliveries) / total_nodes
+        analysis_txt.append(f"{msgID}, {time_diff}s, {avg_duplicate_count}, {reached}")
 
     # Create the plot
     plt.figure(figsize=(12, 6))
@@ -96,6 +95,20 @@ def main():
         os.makedirs("plots")
     plt.savefig(f"plots/message_delivery_times_{folder}.png")
     plt.close()
+
+    # Print the analysis and save it to a file
+    with open(f"plots/analysis_{folder}.txt", "w") as f:
+        f.write(
+            "Message ID, Time to Disseminate, Avg Duplicate Count, Reached percent\n"
+        )
+        for line in analysis_txt:
+            f.write(line + "\n")
+
+
+def main():
+    # Read folder from input
+    folder = sys.argv[1]
+    analyse_message_deliveries(folder)
 
 
 if __name__ == "__main__":

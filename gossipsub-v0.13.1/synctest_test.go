@@ -35,11 +35,10 @@ func TestGossipSub(t *testing.T) {
 		NumberOfConnections: numberOfConnections,
 		GossipSubParams:     gossipSubParams,
 		MessageSize:         (2 * 1024) * 48,
-		WarmupCount:         16,
-		PublishCount:        16,
+		PublishCount:        32,
 	}
-	expParams.PublisherIndex = make([]int, 0, expParams.WarmupCount+expParams.PublishCount)
-	for range expParams.WarmupCount + expParams.PublishCount {
+	expParams.PublisherIndex = make([]int, 0, expParams.PublishCount)
+	for range expParams.PublishCount {
 		expParams.PublisherIndex = append(expParams.PublisherIndex, r.IntN(nodeCount))
 	}
 

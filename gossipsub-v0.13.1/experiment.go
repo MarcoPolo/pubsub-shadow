@@ -26,7 +26,6 @@ type ExperimentParams struct {
 
 	PublisherIndex []int
 	MessageSize    int
-	WarmupCount    int
 	PublishCount   int
 }
 
@@ -88,7 +87,7 @@ func RunExperiment(ctx context.Context, logger *log.Logger, h host.Host, nodeId 
 		return topic.Publish(ctx, msg)
 	}
 
-	for range params.WarmupCount + params.PublishCount {
+	for range params.PublishCount {
 		publishNextMessage()
 		fmt.Printf("%d Waiting for message %d\n", nodeId, msgId-1)
 		_, err := sub.Next(ctx)

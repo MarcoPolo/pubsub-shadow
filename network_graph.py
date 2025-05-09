@@ -1,40 +1,10 @@
-# usage: python network_graph.py [node-count]
 from dataclasses import dataclass
 import os
 import random
+from typing import List
 import networkx as nx
 import yaml
-import argparse
-from typing import Callable, List
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--seed", type=int, required=False)
-parser.add_argument("--node_count", type=int, required=True)
-parser.add_argument("--output", type=str, required=True)
-parser.add_argument("--binary-and-percentage", type=str, required=True)
-args = parser.parse_args()
-
-
-def parse_binary_and_percentage(binary_and_percentage: str) -> Callable[[], str]:
-    binaries: List[str] = []
-    weights: List[int] = []
-    sum: int = 0
-    for arg in binary_and_percentage.split(" "):
-        binary, percentage = arg.split("=")
-        binaries.append(binary)
-        weights.append(int(percentage))
-        sum += int(percentage)
-
-    if sum != 100:
-        raise ValueError("Percentages must sum to 100")
-
-    return lambda: random.choices(binaries, weights=weights)[0]
-
-
-if args.seed is None:
-    args.seed = 1
-
-random.seed(args.seed)
 
 G = nx.DiGraph()
 
@@ -154,54 +124,61 @@ edges = [
     Edge(west_asia, west_asia, 5),
 ]
 
-ids = {}
-for node_type in node_types:
-    for location in locations:
-        name = f"{location.name}-{node_type.name}"
-        ids[name] = len(ids)
-        G.add_node(
-            name,
-            host_bandwidth_up=f"{node_type.upload_bw} Mbit",
-            host_bandwidth_down=f"{node_type.download_bw} Mbit",
-        )
 
-for t1 in node_types:
-    for t2 in node_types:
-        for edge in edges:
-            G.add_edge(
-                f"{edge.src.name}-{t1.name}",
-                f"{edge.dst.name}-{t2.name}",
-                label=f"{edge.src.name}-{t1.name} to {edge.dst.name}-{t2.name}",
-                latency=f"{edge.latency} ms",
-                packet_loss=0.0,
+def generate_graph(
+    binary_paths: List[str],
+    graph_file_name: str,
+    shadow_yaml_file_name: str,
+    params_file_location: str,
+):
+
+    ids = {}
+    for node_type in node_types:
+        for location in locations:
+            name = f"{location.name}-{node_type.name}"
+            ids[name] = len(ids)
+            G.add_node(
+                name,
+                host_bandwidth_up=f"{node_type.upload_bw} Mbit",
+                host_bandwidth_down=f"{node_type.download_bw} Mbit",
             )
 
-with open("graph.gml", "w") as file:
-    file.write("\n".join(nx.generate_gml(G)))
-    file.close
+    for t1 in node_types:
+        for t2 in node_types:
+            for edge in edges:
+                G.add_edge(
+                    f"{edge.src.name}-{t1.name}",
+                    f"{edge.dst.name}-{t2.name}",
+                    label=f"{edge.src.name}-{t1.name} to {edge.dst.name}-{t2.name}",
+                    latency=f"{edge.latency} ms",
+                    packet_loss=0.0,
+                )
 
-with open("shadow.template.yaml", "r") as file:
-    config = yaml.safe_load(file)
+    with open(graph_file_name, "w") as file:
+        file.write("\n".join(nx.generate_gml(G)))
+        file.close
 
-config["network"] = {"graph": {"type": "gml", "file": {"path": "graph.gml"}}}
+    with open("shadow.template.yaml", "r") as file:
+        config = yaml.safe_load(file)
 
-config["hosts"] = {}
-get_binary = parse_binary_and_percentage(args.binary_and_percentage)
+    config["network"] = {"graph": {"type": "gml", "file": {"path": "graph.gml"}}}
 
-for i in range(args.node_count):
-    location = random.choices(locations, map(lambda lc: lc.weight, locations))[0]
-    node_type = random.choices(node_types, map(lambda nt: nt.weight, node_types))[0]
+    config["hosts"] = {}
 
-    config["hosts"][f"node{i}"] = {
-        "network_node_id": ids[f"{location.name}-{node_type.name}"],
-        "processes": [
-            {
-                "args": f"--params {os.getcwd()}/params.json",
-                # "expected_final_state": "running",
-                "path": get_binary(),
-            }
-        ],
-    }
+    for i, binary_path in enumerate(binary_paths):
+        location = random.choices(locations, map(lambda lc: lc.weight, locations))[0]
+        node_type = random.choices(node_types, map(lambda nt: nt.weight, node_types))[0]
 
-with open(args.output, "w") as file:
-    yaml.dump(config, file)
+        config["hosts"][f"node{i}"] = {
+            "network_node_id": ids[f"{location.name}-{node_type.name}"],
+            "processes": [
+                {
+                    "args": f"--params {params_file_location}",
+                    # "expected_final_state": "running",
+                    "path": binary_path,
+                }
+            ],
+        }
+
+    with open(shadow_yaml_file_name, "w") as file:
+        yaml.dump(config, file)
