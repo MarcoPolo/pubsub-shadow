@@ -131,7 +131,6 @@ def generate_graph(
     shadow_yaml_file_name: str,
     params_file_location: str,
 ):
-
     ids = {}
     for node_type in node_types:
         for location in locations:

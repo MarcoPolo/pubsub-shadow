@@ -8,8 +8,11 @@ clean:
 	rm -rf gossipsub-v0.13.1-stock.data || true
 	rm plots/* || true
 
+binaries:
+	cd gossipsub-v0.13.1 && go build -linkshared -o gossipsub-bin
+
 # Run the shadow simulation
 run:
-    uv run run.py
+	uv run run.py
 
-.PHONY: all run clean
+.PHONY: binaries all run clean
