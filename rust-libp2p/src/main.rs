@@ -1,21 +1,14 @@
-use std::time::Instant;
-use std::fs::File;
-use std::path::Path;
-use std::io::Read;
 use clap::Parser;
 use libp2p::{
-    gossipsub::{
-        self, MessageAuthenticity, Message, MessageId, ValidationMode
-    },
-    noise,
-    tcp,
-    yamux,
-    PeerId,
-    Transport,
     core::upgrade,
-    Swarm,
+    gossipsub::{self, Message, MessageAuthenticity, MessageId, ValidationMode},
+    noise, tcp, yamux, PeerId, Swarm, Transport,
 };
-use slog::{Drain, Logger, o};
+use slog::{o, Drain, Logger};
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+use std::time::Instant;
 
 mod connector;
 mod experiment;
@@ -23,9 +16,9 @@ mod key;
 mod script_action;
 
 use connector::ShadowConnector;
-use script_action::{ExperimentParams, NodeID};
+use experiment::{calc_id, run_experiment};
 use key::node_priv_key;
-use experiment::{run_experiment, calc_id};
+use script_action::{ExperimentParams, NodeID};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -101,12 +94,15 @@ fn apply_gossipsub_params(
     if let Some(iwant_followup_time) = params.iwant_followup_time {
         config.iwant_followup_time(std::time::Duration::from_secs_f64(iwant_followup_time));
     }
+
+    // Just disable this by using a large value
+    config.max_transmit_size(1 << 30);
 }
 
 // Get the node_id from hostname
 fn get_node_id() -> Result<NodeID, Box<dyn std::error::Error>> {
     let hostname = hostname::get()?.into_string().unwrap_or_default();
-    
+
     // Parse "nodeX" format
     let mut chars = hostname.chars();
     // Skip "node" prefix
@@ -115,11 +111,9 @@ fn get_node_id() -> Result<NodeID, Box<dyn std::error::Error>> {
             return Err("Invalid hostname format".into());
         }
     }
-    
     // Parse remaining digits as node ID
     let id_str: String = chars.collect();
     let node_id = id_str.parse::<NodeID>()?;
-    
     Ok(node_id)
 }
 
@@ -128,52 +122,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     let logger = create_logger();
     let start_time = Instant::now();
-    
     // Load experiment parameters
     let params = read_params(&args.params)?;
-    
     // Get the node ID from hostname
     let node_id = get_node_id()?;
-    
     // Create identity key from node ID
     let local_key = node_priv_key(node_id);
     let local_peer_id = PeerId::from(local_key.public());
-    
     slog::info!(logger, "Local peer id: {}", local_peer_id);
     slog::info!(logger, "Node ID: {}", node_id);
-    
     // Create a transport
     let transport = tcp::tokio::Transport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
         .boxed();
-    
     // Define a custom message ID function
-    let message_id_fn = |message: &Message| {
-        MessageId::from(calc_id(&message.data))
-    };
+    let message_id_fn = |message: &Message| MessageId::from(calc_id(&message.data));
 
     // Create gossipsub configuration
     let mut config_builder = gossipsub::ConfigBuilder::default();
     config_builder
         .validation_mode(ValidationMode::Permissive)
         .message_id_fn(message_id_fn);
-    
     // Apply custom params if provided
     if let Some(params) = &params.gossip_sub_params {
         apply_gossipsub_params(&mut config_builder, params);
     }
-    
     // Create gossipsub configuration
     let gossipsub_config = config_builder.build().expect("Valid gossipsub config");
-    
     // Create gossipsub behavior
-    let gossipsub = gossipsub::Behaviour::new(
-        MessageAuthenticity::Anonymous,
-        gossipsub_config,
-    )?;
-    
+    let gossipsub = gossipsub::Behaviour::new(MessageAuthenticity::Anonymous, gossipsub_config)?;
     // Build swarm
     let mut swarm = Swarm::new(
         transport,
@@ -181,22 +160,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         local_peer_id,
         libp2p::swarm::Config::with_tokio_executor(),
     );
-    
     // Listen on all interfaces
     swarm.listen_on("/ip4/0.0.0.0/tcp/9000".parse()?)?;
-    
     // Setup connector
     let connector = ShadowConnector;
-    
     // Run the experiment
-    run_experiment(
-        start_time,
-        logger,
-        swarm,
-        node_id,
-        connector,
-        params,
-    ).await?;
-    
+    run_experiment(start_time, logger, swarm, node_id, connector, params).await?;
+
     Ok(())
 }

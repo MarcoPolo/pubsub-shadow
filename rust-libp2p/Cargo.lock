@@ -2804,7 +2804,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-libp2p"
+name = "rust-libp2p-gossip"
 version = "0.1.0"
 dependencies = [
  "byteorder",
