@@ -44,7 +44,7 @@ def analyse_message_deliveries(folder):
             for line in f:
                 try:
                     parsed = json.loads(line)
-                except:
+                except json.JSONDecodeError:
                     continue
 
                 if parsed["msg"] == "PeerID":
