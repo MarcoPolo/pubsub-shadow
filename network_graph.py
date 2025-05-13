@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-import os
 import random
 from typing import List
 import networkx as nx
@@ -155,7 +154,7 @@ def generate_graph(
 
     with open(graph_file_name, "w") as file:
         file.write("\n".join(nx.generate_gml(G)))
-        file.close
+        file.close()
 
     with open("shadow.template.yaml", "r") as file:
         config = yaml.safe_load(file)
@@ -165,8 +164,8 @@ def generate_graph(
     config["hosts"] = {}
 
     for i, binary_path in enumerate(binary_paths):
-        location = random.choices(locations, map(lambda lc: lc.weight, locations))[0]
-        node_type = random.choices(node_types, map(lambda nt: nt.weight, node_types))[0]
+        location = random.choices(locations, weights=[lc.weight for lc in locations])[0]
+        node_type = random.choices(node_types, weights=[nt.weight for nt in node_types])[0]
 
         config["hosts"][f"node{i}"] = {
             "network_node_id": ids[f"{location.name}-{node_type.name}"],
