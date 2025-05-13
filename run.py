@@ -39,7 +39,7 @@ def main():
 
     binaries = experiment.composition(args.composition)
     experiment_params = experiment.params(args.experiment)
-    experiment_params.script = experiment.scenario(args.scenario, args.node_count, 10)
+    experiment_params.script = experiment.scenario(args.scenario, args.node_count)
 
     with open(params_file_name, "w") as f:
         d = asdict(experiment_params)

@@ -42,7 +42,6 @@ func newScriptedNode(
 	connector HostConnector,
 	gossipSubParams pubsub.GossipSubParams,
 ) (*scriptedNode, error) {
-
 	slogger.Info("PeerID", "id", h.ID(), "node_id", nodeID)
 
 	// create a gossipsub node and subscribe to the topic

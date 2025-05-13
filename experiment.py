@@ -20,11 +20,14 @@ class ExperimentParams:
 
 
 def scenario(
-    scenario_name: str, node_count: int, number_of_conns_per_node: int
+    scenario_name: str, node_count: int
 ) -> List[ScriptAction]:
     actions: List[ScriptAction] = []
     match scenario_name:
         case "subnet-blob-msg":
+            number_of_conns_per_node = 10
+            if number_of_conns_per_node >= node_count:
+                number_of_conns_per_node = node_count - 1
             actions.extend(random_network_mesh(node_count, number_of_conns_per_node))
             message_size = 2 * 1024 * 48
             num_messages = 32
@@ -44,6 +47,11 @@ def composition(preset_name: str) -> List[Binary]:
         case "all-rust":
             # Always use debug. We don't measure compute performance here.
             return [Binary("rust-libp2p/target/debug/rust-libp2p-gossip", percent_of_nodes=100)]
+        case "rust-and-go":
+            return [
+                Binary("rust-libp2p/target/debug/rust-libp2p-gossip", percent_of_nodes=50),
+                Binary("gossipsub-v0.13.1/gossipsub-bin", percent_of_nodes=50)
+            ]
     raise ValueError(f"Unknown preset name: {preset_name}")
 
 

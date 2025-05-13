@@ -49,7 +49,6 @@ func pubsubOptions(slogger *slog.Logger, params pubsub.GossipSubParams) []pubsub
 		pubsub.WithValidateQueueSize(600),
 		pubsub.WithMaxMessageSize(10 * 1 << 20),
 		pubsub.WithGossipSubParams(params),
-		pubsub.WithRawTracer(&tr),
 		pubsub.WithEventTracer(&tr),
 	}
 

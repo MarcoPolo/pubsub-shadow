@@ -1,7 +1,8 @@
 use byteorder::{BigEndian, ByteOrder};
 use futures::StreamExt;
 use libp2p::gossipsub::{self, IdentTopic, MessageId};
-use libp2p::Swarm;
+use libp2p::swarm::NetworkBehaviour;
+use libp2p::{identify, Swarm};
 use slog::{error, info, Logger};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
@@ -27,7 +28,7 @@ pub fn message_id_fn(message: &gossipsub::Message) -> MessageId {
 
 pub struct ScriptedNode {
     node_id: NodeID,
-    swarm: Swarm<gossipsub::Behaviour>,
+    swarm: Swarm<MyBehavior>,
     logger: Logger,
     connector: ShadowConnector,
     topics: HashMap<String, IdentTopic>,
@@ -39,11 +40,12 @@ use crate::connector::ShadowConnector;
 impl ScriptedNode {
     pub fn new(
         node_id: NodeID,
-        swarm: Swarm<gossipsub::Behaviour>,
+        swarm: Swarm<MyBehavior>,
         logger: Logger,
         connector: ShadowConnector,
         start_time: Instant,
     ) -> Self {
+        info!(logger, "PeerID"; "id" => swarm.local_peer_id().to_string(), "node_id" => node_id);
         Self {
             node_id,
             swarm,
@@ -119,15 +121,16 @@ impl ScriptedNode {
                                 }
                                 event = self.swarm.select_next_some() => {
                                     // Process any messages that arrive during sleep
-                                    if let libp2p::swarm::SwarmEvent::Behaviour(gossipsub::Event::Message {
+                                    if let libp2p::swarm::SwarmEvent::Behaviour( MyBehaviorEvent::Gossipsub(gossipsub::Event::Message {
                                         propagation_source: peer_id,
                                         message_id: _,
                                         message,
-                                    }) = event {
+                                    })) = event {
                                         if message.data.len() >= 8 {
-                                            let msg_id = BigEndian::read_u64(&message.data);
-                                            info!(self.logger, "Received message {}", msg_id;
-                                                "id" => msg_id, "from" => peer_id.to_string());
+                                            info!(self.logger, "Received Message";
+                                                "topic" => message.topic.into_string(),
+                                                "id" => calc_id(&message.data),
+                                                "from" => peer_id.to_string());
                                         }
                                     }
                                 }
@@ -147,7 +150,12 @@ impl ScriptedNode {
                     let mut msg = vec![0u8; message_size_bytes];
                     BigEndian::write_u64(&mut msg, message_id);
 
-                    match self.swarm.behaviour_mut().publish(topic, msg.clone()) {
+                    match self
+                        .swarm
+                        .behaviour_mut()
+                        .gossipsub
+                        .publish(topic, msg.clone())
+                    {
                         Ok(_) => {
                             info!(self.logger, "Published message {}", message_id);
                         }
@@ -166,7 +174,7 @@ impl ScriptedNode {
                 ScriptAction::SubscribeToTopic { topic_id } => {
                     let topic = self.get_topic(&topic_id);
 
-                    match self.swarm.behaviour_mut().subscribe(&topic) {
+                    match self.swarm.behaviour_mut().gossipsub.subscribe(&topic) {
                         Ok(_) => {
                             info!(self.logger, "Subscribed to topic {}", topic_id);
                         }
@@ -189,10 +197,16 @@ impl ScriptedNode {
     }
 }
 
+#[derive(NetworkBehaviour)]
+pub struct MyBehavior {
+    pub gossipsub: gossipsub::Behaviour,
+    pub identify: identify::Behaviour,
+}
+
 pub async fn run_experiment(
     start_time: Instant,
     logger: Logger,
-    swarm: Swarm<gossipsub::Behaviour>,
+    swarm: Swarm<MyBehavior>,
     node_id: NodeID,
     connector: ShadowConnector,
     params: ExperimentParams,

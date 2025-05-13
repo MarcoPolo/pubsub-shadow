@@ -1,10 +1,10 @@
 use clap::Parser;
 use libp2p::{
     core::upgrade,
-    gossipsub::{self, Message, MessageAuthenticity, MessageId, ValidationMode},
-    noise, tcp, yamux, PeerId, Swarm, Transport,
+    gossipsub::{self, MessageAuthenticity, ValidationMode},
+    identify, noise, tcp, yamux, PeerId, Swarm, Transport,
 };
-use slog::{o, Drain, Logger};
+use slog::{o, Drain, FnValue, Logger, PushFnValue, Record};
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
@@ -16,7 +16,7 @@ mod key;
 mod script_action;
 
 use connector::ShadowConnector;
-use experiment::{calc_id, run_experiment};
+use experiment::{run_experiment, MyBehavior};
 use key::node_priv_key;
 use script_action::{ExperimentParams, NodeID};
 
@@ -29,8 +29,22 @@ struct Args {
 }
 
 fn create_logger() -> Logger {
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_json::Json::new(std::io::stdout())
+        .add_key_value(o!(
+            "time" => FnValue(move |_ : &slog::Record| {
+                    time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .ok()
+            }),
+            "level" => FnValue(move |rinfo : &Record| {
+                rinfo.level().as_short_str()
+            }),
+            "msg" => PushFnValue(move |record : &Record, ser| {
+                ser.emit(record.msg())
+            }),
+        ))
+        .build()
+        .fuse();
     let drain = slog_async::Async::new(drain).build().fuse();
     slog::Logger::root(drain, o!())
 }
@@ -137,14 +151,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .authenticate(noise::Config::new(&local_key)?)
         .multiplex(yamux::Config::default())
         .boxed();
-    // Define a custom message ID function
-    let message_id_fn = |message: &Message| MessageId::from(calc_id(&message.data));
 
     // Create gossipsub configuration
     let mut config_builder = gossipsub::ConfigBuilder::default();
     config_builder
-        .validation_mode(ValidationMode::Permissive)
-        .message_id_fn(message_id_fn);
+        .validation_mode(ValidationMode::Anonymous)
+        .message_id_fn(experiment::message_id_fn);
     // Apply custom params if provided
     if let Some(params) = &params.gossip_sub_params {
         apply_gossipsub_params(&mut config_builder, params);
@@ -153,10 +165,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let gossipsub_config = config_builder.build().expect("Valid gossipsub config");
     // Create gossipsub behavior
     let gossipsub = gossipsub::Behaviour::new(MessageAuthenticity::Anonymous, gossipsub_config)?;
+    let identify = identify::Behaviour::new(identify::Config::new(
+        "/interop/1.0.0".into(),
+        local_key.public(),
+    ));
+    let behavior = MyBehavior {
+        gossipsub,
+        identify,
+    };
     // Build swarm
     let mut swarm = Swarm::new(
         transport,
-        gossipsub,
+        behavior,
         local_peer_id,
         libp2p::swarm::Config::with_tokio_executor(),
     );

@@ -41,6 +41,7 @@ def analyse_message_deliveries(folder):
     for file in logfile_iterator(folder):
         with open(file, "r") as f:
             node_id = ""
+            seen_message_ids = set()
             for line in f:
                 try:
                     parsed = json.loads(line)
@@ -53,20 +54,21 @@ def analyse_message_deliveries(folder):
                     node_id_to_peer_id[node_id] = parsed["id"]
                     continue
 
-                if parsed["service"] != "gossipsub":
+                if "msg" not in parsed or "time" not in parsed:
                     continue
+
+                # Parse timestamp RFC3339
+                ts = datetime.fromisoformat(parsed["time"])
+
                 match parsed["msg"]:
-                    case "Deliver":
-                        # Parse timestamp RFC3339
+                    case "Received Message":
                         msgID = parsed["id"]
-                        ts = datetime.fromisoformat(parsed["time"])
-                        messages[msgID].append((ts, node_id))
-                    case "Duplicate":
-                        # Parse timestamp RFC3339
-                        msgID = parsed["id"]
-                        ts = datetime.fromisoformat(parsed["time"])
-                        duplicate_count[msgID] += 1
-                        duplicate_count_by_message_and_node[msgID][node_id] += 1
+                        if msgID not in seen_message_ids:
+                            seen_message_ids.add(msgID)
+                            messages[msgID].append((ts, node_id))
+                        else:
+                            duplicate_count[msgID] += 1
+                            duplicate_count_by_message_and_node[msgID][node_id] += 1
 
     # Prepare data for plotting
     msg_ids = []
@@ -79,7 +81,12 @@ def analyse_message_deliveries(folder):
         msg_ids.append(msgID)
         time_diffs.append(time_diff)
         avg_duplicate_count = duplicate_count[msgID] / total_nodes
-        reached = len(deliveries) / total_nodes
+        reached = len(deliveries) / (total_nodes - 1) # Minus 1 for the original sender
+        if reached > 1.0:
+            if len(deliveries) > total_nodes:
+                raise ValueError(f"Message {msgID} was delivered to more nodes than exist")
+            # We overshot because the original publisher received a duplicate message
+            reached = 1.0
         analysis_txt.append(f"{msgID}, {time_diff}s, {avg_duplicate_count}, {reached}")
 
     # Create the plot
