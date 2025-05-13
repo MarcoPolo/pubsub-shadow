@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from dataclasses import asdict
 import argparse
 import json
@@ -14,6 +15,13 @@ params_file_name = "params.json"
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--dry-run",
+        type=bool,
+        required=False,
+        help="If set, will generate files but not run Shadow",
+        default=False,
+    )
     parser.add_argument("--node_count", type=int, required=True)
     parser.add_argument("--seed", type=int, required=False, default=1)
     parser.add_argument("--experiment", type=str, required=True)
@@ -29,14 +37,14 @@ def main():
 
     random.seed(args.seed)
 
-    subprocess.run(["make", "binaries"])
-
     binaries = experiment.composition(args.composition)
     experiment_params = experiment.params(args.experiment)
     experiment_params.script = experiment.scenario(args.scenario, args.node_count, 10)
 
     with open(params_file_name, "w") as f:
-        json.dump(asdict(experiment_params), f)
+        d = asdict(experiment_params)
+        d["script"] = [action.model_dump() for action in experiment_params.script]
+        json.dump(d, f)
 
     # Define the binaries we are running
     binary_paths = random.choices(
@@ -52,6 +60,11 @@ def main():
         "shadow.yaml",
         params_file_location=os.path.join(os.getcwd(), params_file_name),
     )
+
+    if args.dry_run:
+        return
+
+    subprocess.run(["make", "binaries"])
 
     subprocess.run(
         ["shadow", "--progress", "true", "-d", args.output_dir, "shadow.yaml"],

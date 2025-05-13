@@ -6,15 +6,13 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand/v2"
+	"log/slog"
 	"os"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/net/simconn"
@@ -24,28 +22,24 @@ import (
 )
 
 func TestGossipSub(t *testing.T) {
-	const nodeCount = 700
-	const numberOfConnections = 10
-	r := rand.New(rand.NewChaCha8([32]byte{}))
-
-	gossipSubParams := pubsub.DefaultGossipSubParams()
-
-	expParams := ExperimentParams{
-		NodeCount:           nodeCount,
-		NumberOfConnections: numberOfConnections,
-		GossipSubParams:     gossipSubParams,
-		MessageSize:         (2 * 1024) * 48,
-		PublishCount:        32,
+	// Read params.json
+	os.ReadFile("../params.json")
+	params, err := readParams("../params.json")
+	require.NoError(t, err)
+	nodeIDs := make(map[int]struct{})
+	for _, action := range params.Script {
+		switch a := action.(type) {
+		case IfNodeIDEqualsAction:
+			nodeIDs[a.NodeID] = struct{}{}
+		}
 	}
-	expParams.PublisherIndex = make([]int, 0, expParams.PublishCount)
-	for range expParams.PublishCount {
-		expParams.PublisherIndex = append(expParams.PublisherIndex, r.IntN(nodeCount))
-	}
+	nodeCount := len(nodeIDs)
 
-	runGossipSubTest(t, "gossipsub", expParams)
+	// Create a script with actions every 12 seconds
+	runGossipSubTest(t, "gossipsub", nodeCount, params)
 }
 
-func runGossipSubTest(t *testing.T, testName string, expParams ExperimentParams) {
+func runGossipSubTest(t *testing.T, testName string, nodeCount int, expParams ExperimentParams) {
 	synctest.Run(func() {
 		// qlogDir := fmt.Sprintf("/tmp/gossipsub-%d-%s", subnetCount, publishStrategy)
 		qlogDir := ""
@@ -57,7 +51,7 @@ func runGossipSubTest(t *testing.T, testName string, expParams ExperimentParams)
 			{LinkSettings: simconn.NodeBiDiLinkSettings{
 				Downlink: simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2}, // Divide by two since this is latency for each direction
 				Uplink:   simconn.LinkSettings{BitsPerSecond: bandwidth, Latency: latency / 2},
-			}, Count: expParams.NodeCount},
+			}, Count: nodeCount},
 		}, simlibp2p.NetworkSettings{
 			UseBlankHost: true,
 			QUICReuseOptsForHostIdx: func(idx int) []quicreuse.Option {
@@ -91,6 +85,9 @@ func runGossipSubTest(t *testing.T, testName string, expParams ExperimentParams)
 
 		connector := newSimNetConnector(t, meta.Nodes, 2)
 
+		// Use current time for simulation start time
+		startTime := time.Now()
+
 		var wg sync.WaitGroup
 		for nodeIdx, node := range meta.Nodes {
 			wg.Add(1)
@@ -101,7 +98,11 @@ func runGossipSubTest(t *testing.T, testName string, expParams ExperimentParams)
 				require.NoError(t, err)
 				defer f.Close()
 				logger := log.New(f, "", log.LstdFlags|log.Lmicroseconds)
-				err = RunExperiment(ctx, logger, node, nodeIdx, connector, expParams)
+
+				// Create a structured logger as well
+				slogger := slog.New(slog.NewJSONHandler(f, nil))
+
+				err = RunExperiment(ctx, startTime, logger, slogger, node, nodeIdx, connector, expParams)
 				if err != nil {
 					t.Errorf("error running experiment on node %d: %s", nodeIdx, err)
 				}
@@ -112,53 +113,34 @@ func runGossipSubTest(t *testing.T, testName string, expParams ExperimentParams)
 }
 
 type SimNetConnector struct {
-	t               *testing.T
-	sem             chan struct{}
-	allNodes        []host.Host
-	connectionsDone chan struct{}
-	connectedNodes  atomic.Int64
+	t        *testing.T
+	allNodes []host.Host
 }
 
 func newSimNetConnector(t *testing.T, allNodes []host.Host, connectorConcurrency int) *SimNetConnector {
 	return &SimNetConnector{
-		t:               t,
-		sem:             make(chan struct{}, connectorConcurrency),
-		allNodes:        allNodes,
-		connectionsDone: make(chan struct{}),
+		t:        t,
+		allNodes: allNodes,
 	}
 }
 
-func (c *SimNetConnector) ConnectSome(ctx context.Context, h host.Host, nodeIdx int, count int) {
-	defer func() {
-		x := c.connectedNodes.Add(1)
-		if x == int64(len(c.allNodes)) {
-			close(c.connectionsDone)
-		}
-		if x%100 == 0 {
-			c.t.Logf("connected %d out of %d nodes", x, len(c.allNodes))
-			c.t.Logf("peers: %v", len(h.Network().Peers()))
-		}
-	}()
-
-	for len(h.Network().Peers()) < count {
-		n := rand.IntN(len(c.allNodes))
-		if n == nodeIdx {
-			continue
-		}
-
-		b := c.allNodes[n]
-		err := h.Connect(ctx, peer.AddrInfo{ID: b.ID(), Addrs: b.Addrs()})
-		if err != nil {
-			c.t.Logf("error connecting to node %d: %s", n, err)
-		}
+func (c *SimNetConnector) ConnectTo(ctx context.Context, h host.Host, targetNodeID int) error {
+	if targetNodeID < 0 || targetNodeID >= len(c.allNodes) {
+		return fmt.Errorf("target node ID %d out of range [0, %d)", targetNodeID, len(c.allNodes))
 	}
-}
 
-func (c *SimNetConnector) AfterConnect(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-		return
-	case <-c.connectionsDone:
-		return
+	targetNode := c.allNodes[targetNodeID]
+
+	// Don't connect to self
+	if h.ID() == targetNode.ID() {
+		return nil
 	}
+
+	err := h.Connect(ctx, peer.AddrInfo{ID: targetNode.ID(), Addrs: targetNode.Addrs()})
+	if err != nil {
+		c.t.Logf("error connecting to node %d: %s", targetNodeID, err)
+		return err
+	}
+
+	return nil
 }

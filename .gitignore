@@ -11,10 +11,11 @@ synctest*.data
 **/gossipsub-bin
 params.json
 /venv
-/plots
+**/plots
 .DS_Store
 Dockerfile
 docker-compose.yml
 backup
 timelines
 experiment-results/**
+__pycache__

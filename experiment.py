@@ -77,9 +77,11 @@ def random_network_mesh(
     actions = []
     for node_id, node_connections in connections.items():
         actions.append(
-            script_action.Connect(
+            script_action.IfNodeIDEquals(
                 nodeID=node_id,
-                connectTo=node_connections,
+                action=script_action.Connect(
+                    connectTo=node_connections,
+                ),
             )
         )
     return actions
@@ -88,23 +90,32 @@ def random_network_mesh(
 def random_publish_every_12s(
     node_count: int, numMessages: int, messageSize: int
 ) -> List[ScriptAction]:
+    topicStr = "foobar"
+    actions = []
+    actions.append(script_action.SubscribeToTopic(
+        topicID=topicStr
+    ))
+
     # Start at 120 seconds (2 minutes) to allow for setup time
     elapsed_seconds = 120
-    actions = []
     actions.append(script_action.WaitUntil(elapsedSeconds=elapsed_seconds))
 
-    for _ in range(numMessages):
+    for i in range(numMessages):
         random_node = random.randint(0, node_count - 1)
         actions.append(
             script_action.IfNodeIDEquals(
                 nodeID=random_node,
                 action=script_action.Publish(
+                    messageID=i,
+                    topicID=topicStr,
                     messageSizeBytes=messageSize,
-                    publisherIndex=random.randint(0, node_count - 1),
                 ),
             )
         )
         elapsed_seconds += 12  # Add 12 seconds for each subsequent message
         actions.append(script_action.WaitUntil(elapsedSeconds=elapsed_seconds))
+
+    elapsed_seconds += 30  # wait a bit more to allow all messages to flush
+    actions.append(script_action.WaitUntil(elapsedSeconds=elapsed_seconds))
 
     return actions

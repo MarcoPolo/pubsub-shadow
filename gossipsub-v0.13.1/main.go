@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
-	"math/rand"
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -36,15 +36,15 @@ var (
 )
 
 // pubsubOptions creates a list of options to configure our router with.
-func pubsubOptions(logger *log.Logger, params pubsub.GossipSubParams) []pubsub.Option {
-	tr := gossipTracer{logger: slog.New(slog.NewJSONHandler(logger.Writer(), nil)).With("service", "gossipsub")}
+func pubsubOptions(slogger *slog.Logger, params pubsub.GossipSubParams) []pubsub.Option {
+	tr := gossipTracer{logger: slogger.With("service", "gossipsub")}
 	psOpts := []pubsub.Option{
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithNoAuthor(),
 		pubsub.WithMessageIdFn(func(pmsg *pubsubpb.Message) string {
-			// TODO: change
 			return CalcID(pmsg.Data)
 		}),
+		// TODO: probably make these experiment parameters
 		pubsub.WithPeerOutboundQueueSize(600),
 		pubsub.WithValidateQueueSize(600),
 		pubsub.WithMaxMessageSize(10 * 1 << 20),
@@ -67,6 +67,12 @@ func nodePrivKey(id int) crypto.PrivKey {
 		panic(err)
 	}
 	return privkey
+}
+
+type ExperimentParams struct {
+	GossipSubParams pubsub.GossipSubParams `json:"gossipSubParams"`
+
+	Script ScriptActions `json:"script"`
 }
 
 func readParams(path string) (ExperimentParams, error) {
@@ -95,8 +101,11 @@ func readParams(path string) (ExperimentParams, error) {
 }
 
 func main() {
+	startTime := time.Now()
+
 	flag.Parse()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	params, err := readParams(*paramsFileFlag)
 	if err != nil {
 		panic(err)
@@ -112,7 +121,6 @@ func main() {
 	if _, err := fmt.Sscanf(hostname, "node%d", &nodeId); err != nil {
 		panic(err)
 	}
-	fmt.Printf("Node ID: %d\n", nodeId)
 
 	// listen for incoming connections
 	h, err := libp2p.New(
@@ -124,70 +132,38 @@ func main() {
 		panic(err)
 	}
 
-	logger := log.New(os.Stdout, "", log.LstdFlags|log.Lmicroseconds)
+	logger := log.New(os.Stderr, "", log.LstdFlags|log.Lmicroseconds)
+	slogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	RunExperiment(ctx, logger, h, nodeId, &ShadowConnector{NodeCount: params.NodeCount}, params)
+	connector := &ShadowConnector{}
+	RunExperiment(ctx, startTime, logger, slogger, h, nodeId, connector, params)
 }
 
-type ShadowConnector struct {
-	NodeCount int
-}
+type ShadowConnector struct{}
 
-func (c *ShadowConnector) ConnectSome(ctx context.Context, h host.Host, nodeId int, count int) {
-	peers := make(map[int]struct{})
-	for len(h.Network().Peers()) < count {
-		// do node discovery by picking the node randomly
-		id := rand.Intn(c.NodeCount)
-		if _, ok := peers[id]; ok || id == nodeId {
-			continue
-		}
-
-		// resolve for ip addresses of the discovered node
-		addrs, err := net.LookupHost(fmt.Sprintf("node%d", id))
-		if err != nil || len(addrs) == 0 {
-			log.Printf("Failed resolving for the address of node%d: %v\n", id, err)
-			continue
-		}
-
-		// craft an addr info to be used to connect
-		peerId, err := peer.IDFromPrivateKey(nodePrivKey(id))
-		if err != nil {
-			panic(err)
-		}
-		addr := fmt.Sprintf("/ip4/%s/tcp/9000/p2p/%s", addrs[0], peerId)
-		// addr := fmt.Sprintf("/ip4/%s/udp/9000/quic-v1/p2p/%s", addrs[0], peerId)
-		info, err := peer.AddrInfoFromString(addr)
-		if err != nil {
-			panic(err)
-		}
-
-		// connect to the peer
-		if err = h.Connect(ctx, *info); err != nil {
-			log.Printf("Failed connecting to node%d: %v\n", id, err)
-			continue
-		}
-		peers[id] = struct{}{}
-		log.Printf("Connected to node%d: %s\n", id, addr)
+func (c *ShadowConnector) ConnectTo(ctx context.Context, h host.Host, id int) error {
+	// resolve for ip addresses of the discovered node
+	addrs, err := net.LookupHost(fmt.Sprintf("node%d", id))
+	if err != nil || len(addrs) == 0 {
+		return fmt.Errorf("failed resolving for the address of node%d: %v", id, err)
 	}
-}
 
-func (c ShadowConnector) AfterConnect(ctx context.Context) {
-}
+	// craft an addr info to be used to connect
+	peerId, err := peer.IDFromPrivateKey(nodePrivKey(id))
+	if err != nil {
+		panic(err)
+	}
+	addr := fmt.Sprintf("/ip4/%s/tcp/9000/p2p/%s", addrs[0], peerId)
+	// TODO support QUIC in Shadow
+	// addr := fmt.Sprintf("/ip4/%s/udp/9000/quic-v1/p2p/%s", addrs[0], peerId)
+	info, err := peer.AddrInfoFromString(addr)
+	if err != nil {
+		panic(err)
+	}
 
-func subnetsForPeer(subnetCount int, maxSubnets int) []int {
-	if subnetCount > maxSubnets {
-		subnetCount = maxSubnets
+	// connect to the peer
+	if err = h.Connect(ctx, *info); err != nil {
+		return fmt.Errorf("failed connecting to node%d: %v", id, err)
 	}
-	subnets := make([]int, maxSubnets)
-	for i := range maxSubnets {
-		subnets[i] = i
-	}
-	if subnetCount == maxSubnets {
-		// No point in shuffling
-		return subnets
-	}
-	rand.Shuffle(len(subnets), func(i, j int) {
-		subnets[i], subnets[j] = subnets[j], subnets[i]
-	})
-	return subnets[:subnetCount]
+	return nil
 }

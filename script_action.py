@@ -8,7 +8,6 @@ NodeID: TypeAlias = int
 
 class Connect(BaseModel):
     type: Literal["connect"] = "connect"
-    nodeID: NodeID
     connectTo: List[NodeID]
 
 
@@ -26,8 +25,12 @@ class WaitUntil(BaseModel):
 
 class Publish(BaseModel):
     type: Literal["publish"] = "publish"
-    publisherIndex: int
+    messageID: int
     messageSizeBytes: int
+    topicID: str
 
+class SubscribeToTopic(BaseModel):
+    type: Literal["subscribeToTopic"] = "subscribeToTopic"
+    topicID: str
 
-ScriptAction = Union[Connect, IfNodeIDEquals, WaitUntil, Publish]
+ScriptAction = Union[Connect, IfNodeIDEquals, WaitUntil, Publish, SubscribeToTopic]
