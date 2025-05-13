@@ -1,9 +1,9 @@
 from collections import defaultdict
 from dataclasses import dataclass, field
 import random
-from typing import List
+from typing import List, Dict, Set
 
-from script_action import ScriptAction
+from script_action import ScriptAction, NodeID
 import script_action
 
 
@@ -41,12 +41,15 @@ def composition(preset_name: str) -> List[Binary]:
     match preset_name:
         case "all-go":
             return [Binary("gossipsub-v0.13.1/gossipsub-bin", percent_of_nodes=100)]
+        case "all-rust":
+            # Always use debug. We don't measure compute performance here.
+            return [Binary("rust-libp2p/target/debug/rust-libp2p-gossip", percent_of_nodes=100)]
     raise ValueError(f"Unknown preset name: {preset_name}")
 
 
 def params(experiment_name: str) -> ExperimentParams:
     match experiment_name:
-        case "gossipsub-v0.13.1-stock":
+        case "default-params":
             return ExperimentParams(gossipSubParams={})
         case "gossipsub-v0.13.1-stock-smaller-D":
             return ExperimentParams(
@@ -65,14 +68,14 @@ def params(experiment_name: str) -> ExperimentParams:
 def random_network_mesh(
     node_count: int, number_of_connections: int
 ) -> List[ScriptAction]:
-    connections = defaultdict(list)
+    connections: Dict[NodeID, Set[NodeID]] = defaultdict(set)
     for node_id in range(node_count):
         while len(connections[node_id]) < number_of_connections:
             target = random.randint(0, node_count - 1)
             if target == node_id:
                 continue
-            connections[node_id].append(target)
-            connections[target].append(node_id)
+            connections[node_id].add(target)
+            connections[target].add(node_id)
 
     actions = []
     for node_id, node_connections in connections.items():
@@ -80,7 +83,7 @@ def random_network_mesh(
             script_action.IfNodeIDEquals(
                 nodeID=node_id,
                 action=script_action.Connect(
-                    connectTo=node_connections,
+                    connectTo=list(node_connections),
                 ),
             )
         )
