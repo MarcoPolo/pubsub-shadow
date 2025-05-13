@@ -77,6 +77,7 @@ def random_network_mesh(
     node_count: int, number_of_connections: int
 ) -> List[ScriptAction]:
     connections: Dict[NodeID, Set[NodeID]] = defaultdict(set)
+    connect_to: Dict[NodeID, List[NodeID]] = defaultdict(list)
     for node_id in range(node_count):
         while len(connections[node_id]) < number_of_connections:
             target = random.randint(0, node_count - 1)
@@ -85,8 +86,10 @@ def random_network_mesh(
             connections[node_id].add(target)
             connections[target].add(node_id)
 
+            connect_to[node_id].append(target)
+
     actions = []
-    for node_id, node_connections in connections.items():
+    for node_id, node_connections in connect_to.items():
         actions.append(
             script_action.IfNodeIDEquals(
                 nodeID=node_id,
