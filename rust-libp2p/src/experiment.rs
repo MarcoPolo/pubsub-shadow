@@ -29,7 +29,8 @@ pub fn message_id_fn(message: &gossipsub::Message) -> MessageId {
 pub struct ScriptedNode {
     node_id: NodeID,
     swarm: Swarm<MyBehavior>,
-    logger: Logger,
+    stderr_logger: Logger,
+    stdout_logger: Logger,
     connector: ShadowConnector,
     topics: HashMap<String, IdentTopic>,
     start_time: Instant,
@@ -41,15 +42,17 @@ impl ScriptedNode {
     pub fn new(
         node_id: NodeID,
         swarm: Swarm<MyBehavior>,
-        logger: Logger,
+        stderr_logger: Logger,
+        stdout_logger: Logger,
         connector: ShadowConnector,
         start_time: Instant,
     ) -> Self {
-        info!(logger, "PeerID"; "id" => swarm.local_peer_id().to_string(), "node_id" => node_id);
+        info!(stdout_logger, "PeerID"; "id" => swarm.local_peer_id().to_string(), "node_id" => node_id);
         Self {
             node_id,
             swarm,
-            logger,
+            stderr_logger,
+            stdout_logger,
             connector,
             topics: HashMap::new(),
             start_time,
@@ -80,18 +83,21 @@ impl ScriptedNode {
                             .await
                         {
                             Ok(_) => {
-                                info!(self.logger, "Connected to node {}", target_node_id);
+                                info!(self.stderr_logger, "Connected to node {}", target_node_id);
                             }
                             Err(e) => {
                                 error!(
-                                    self.logger,
+                                    self.stderr_logger,
                                     "Failed to connect to node {}: {}", target_node_id, e
                                 );
                                 return Err(e);
                             }
                         }
                     }
-                    info!(self.logger, "Node {} connected to peers", self.node_id);
+                    info!(
+                        self.stderr_logger,
+                        "Node {} connected to peers", self.node_id
+                    );
                 }
                 ScriptAction::IfNodeIDEquals { node_id, action } => {
                     if node_id == self.node_id {
@@ -105,7 +111,7 @@ impl ScriptedNode {
                     if now < target_time {
                         let wait_time = target_time.duration_since(now);
                         info!(
-                            self.logger,
+                            self.stderr_logger,
                             "Waiting {:?} (until elapsed: {}s)", wait_time, elapsed_seconds
                         );
 
@@ -127,7 +133,7 @@ impl ScriptedNode {
                                         message,
                                     })) = event {
                                         if message.data.len() >= 8 {
-                                            info!(self.logger, "Received Message";
+                                            info!(self.stdout_logger, "Received Message";
                                                 "topic" => message.topic.into_string(),
                                                 "id" => calc_id(&message.data),
                                                 "from" => peer_id.to_string());
@@ -145,7 +151,7 @@ impl ScriptedNode {
                 } => {
                     let topic = self.get_topic(&topic_id);
 
-                    info!(self.logger, "Publishing message {}", message_id);
+                    info!(self.stderr_logger, "Publishing message {}", message_id);
 
                     let mut msg = vec![0u8; message_size_bytes];
                     BigEndian::write_u64(&mut msg, message_id);
@@ -157,11 +163,11 @@ impl ScriptedNode {
                         .publish(topic, msg.clone())
                     {
                         Ok(_) => {
-                            info!(self.logger, "Published message {}", message_id);
+                            info!(self.stderr_logger, "Published message {}", message_id);
                         }
                         Err(e) => {
                             error!(
-                                self.logger,
+                                self.stderr_logger,
                                 "Failed to publish message {}: {}", message_id, e
                             );
                             return Err(Box::new(std::io::Error::new(
@@ -176,11 +182,11 @@ impl ScriptedNode {
 
                     match self.swarm.behaviour_mut().gossipsub.subscribe(&topic) {
                         Ok(_) => {
-                            info!(self.logger, "Subscribed to topic {}", topic_id);
+                            info!(self.stderr_logger, "Subscribed to topic {}", topic_id);
                         }
                         Err(e) => {
                             error!(
-                                self.logger,
+                                self.stderr_logger,
                                 "Failed to subscribe to topic {}: {}", topic_id, e
                             );
                             return Err(Box::new(std::io::Error::new(
@@ -205,13 +211,21 @@ pub struct MyBehavior {
 
 pub async fn run_experiment(
     start_time: Instant,
-    logger: Logger,
+    stderr_logger: Logger,
+    stdout_logger: Logger,
     swarm: Swarm<MyBehavior>,
     node_id: NodeID,
     connector: ShadowConnector,
     params: ExperimentParams,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut node = ScriptedNode::new(node_id, swarm, logger.clone(), connector, start_time);
+    let mut node = ScriptedNode::new(
+        node_id,
+        swarm,
+        stderr_logger.clone(),
+        stdout_logger.clone(),
+        connector,
+        start_time,
+    );
     for action in params.script {
         node.run_action(action).await?;
     }

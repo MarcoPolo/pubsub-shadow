@@ -28,8 +28,9 @@ struct Args {
     params: String,
 }
 
-fn create_logger() -> Logger {
-    let drain = slog_json::Json::new(std::io::stdout())
+fn create_logger() -> (Logger, Logger) {
+    // Create stderr logger for most messages
+    let stderr_drain = slog_json::Json::new(std::io::stderr())
         .add_key_value(o!(
             "time" => FnValue(move |_ : &slog::Record| {
                     time::OffsetDateTime::now_utc()
@@ -45,8 +46,30 @@ fn create_logger() -> Logger {
         ))
         .build()
         .fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-    slog::Logger::root(drain, o!())
+    let stderr_drain = slog_async::Async::new(stderr_drain).build().fuse();
+    let stderr_logger = slog::Logger::root(stderr_drain, o!());
+
+    // Create stdout logger for special messages
+    let stdout_drain = slog_json::Json::new(std::io::stdout())
+        .add_key_value(o!(
+            "time" => FnValue(move |_ : &slog::Record| {
+                    time::OffsetDateTime::now_utc()
+                    .format(&time::format_description::well_known::Rfc3339)
+                    .ok()
+            }),
+            "level" => FnValue(move |rinfo : &Record| {
+                rinfo.level().as_short_str()
+            }),
+            "msg" => PushFnValue(move |record : &Record, ser| {
+                ser.emit(record.msg())
+            }),
+        ))
+        .build()
+        .fuse();
+    let stdout_drain = slog_async::Async::new(stdout_drain).build().fuse();
+    let stdout_logger = slog::Logger::root(stdout_drain, o!());
+
+    (stderr_logger, stdout_logger)
 }
 
 fn read_params(path: &str) -> Result<ExperimentParams, Box<dyn std::error::Error>> {
@@ -133,8 +156,15 @@ fn get_node_id() -> Result<NodeID, Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let subscriber = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_ansi(false)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let args = Args::parse();
-    let logger = create_logger();
+    let (stderr_logger, stdout_logger) = create_logger();
     let start_time = Instant::now();
     // Load experiment parameters
     let params = read_params(&args.params)?;
@@ -143,8 +173,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create identity key from node ID
     let local_key = node_priv_key(node_id);
     let local_peer_id = PeerId::from(local_key.public());
-    slog::info!(logger, "Local peer id: {}", local_peer_id);
-    slog::info!(logger, "Node ID: {}", node_id);
+    slog::info!(stderr_logger, "Local peer id: {}", local_peer_id);
+    slog::info!(stderr_logger, "Node ID: {}", node_id);
     // Create a transport
     let transport = tcp::tokio::Transport::default()
         .upgrade(upgrade::Version::V1)
@@ -185,7 +215,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup connector
     let connector = ShadowConnector;
     // Run the experiment
-    run_experiment(start_time, logger, swarm, node_id, connector, params).await?;
+    run_experiment(
+        start_time,
+        stderr_logger,
+        stdout_logger,
+        swarm,
+        node_id,
+        connector,
+        params,
+    )
+    .await?;
 
     Ok(())
 }
