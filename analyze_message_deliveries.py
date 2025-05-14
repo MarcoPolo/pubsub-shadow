@@ -75,7 +75,11 @@ def analyse_message_deliveries(folder):
     time_diffs = []
 
     total_nodes = len(node_id_to_peer_id)
-    for msgID, deliveries in messages.items():
+    messagesIDs = list(messages.keys())
+    messagesIDs.sort(key=lambda x: int(x))
+
+    for msgID in messagesIDs:
+        deliveries = messages[msgID]
         deliveries.sort(key=lambda x: x[0])
         time_diff = (deliveries[-1][0] - deliveries[0][0]).total_seconds()
         msg_ids.append(msgID)

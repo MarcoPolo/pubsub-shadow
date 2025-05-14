@@ -173,11 +173,10 @@ def generate_graph(
                 {
                     "args": f"--params {params_file_location}",
                     # For Debugging:
-                    # "environment": {
-                    #     "GOLOG_LOG_LEVEL": "debug",
-                    #     "RUST_LOG": "debug",
-                    # },
-                    # "expected_final_state": "running",
+                    "environment": {
+                        # "GOLOG_LOG_LEVEL": "debug",
+                        # "RUST_LOG": "debug",
+                    },
                     "path": binary_path,
                 }
             ],
