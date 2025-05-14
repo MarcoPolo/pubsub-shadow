@@ -23,7 +23,7 @@ pub fn calc_id(data: &[u8]) -> String {
 
 // Custom message ID function similar to Go implementation
 pub fn message_id_fn(message: &gossipsub::Message) -> MessageId {
-    MessageId::from(calc_id(&message.data))
+    MessageId::from(&message.data[0..8])
 }
 
 pub struct ScriptedNode {
