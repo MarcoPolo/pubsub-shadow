@@ -33,7 +33,7 @@ def main():
     args = parser.parse_args()
 
     if args.output_dir is None:
-        args.output_dir = f"{args.experiment}.data"
+        args.output_dir = f"{args.experiment}-{args.scenario}-{args.node_count}-{args.composition}.data"
 
     random.seed(args.seed)
 
