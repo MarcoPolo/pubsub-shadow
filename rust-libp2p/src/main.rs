@@ -9,10 +9,12 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 use std::time::Instant;
+use tracing_subscriber::Layer;
 
 mod connector;
 mod experiment;
 mod key;
+mod log_filter;
 mod script_action;
 
 use connector::ShadowConnector;
@@ -156,15 +158,26 @@ fn get_node_id() -> Result<NodeID, Box<dyn std::error::Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let subscriber = tracing_subscriber::fmt()
-        .with_writer(std::io::stderr)
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .with_ansi(false)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-
     let args = Args::parse();
     let (stderr_logger, stdout_logger) = create_logger();
+
+    // Create a custom layer for intercepting duplicate message logs
+    let dup_message_layer = log_filter::DuplicateMessageLayer::new(stdout_logger.clone());
+
+    // Create and set the tracing subscriber with our custom layer
+    use tracing_subscriber::layer::SubscriberExt;
+
+    let subscriber = tracing_subscriber::registry()
+        .with(dup_message_layer.with_filter(log_filter::gossipsub_filter()))
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .with_ansi(false)
+                .with_filter(tracing_subscriber::EnvFilter::from_default_env()),
+        );
+
+    tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+
     let start_time = Instant::now();
     // Load experiment parameters
     let params = read_params(&args.params)?;
